@@ -1,0 +1,37 @@
+---
+title: "曲率フロー変形の情報幾何化の可能性"
+author: "ryamada"
+date: "2017年1月12日"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4 #デフォルト値は2
+    number_section: true #trueでナンバリング
+---
+
+
+```{r setup, include=FALSE}
+library(knitr)
+library(rgl)
+opts_chunk$set(echo = TRUE)
+knit_hooks$set(rgl = hook_webgl)
+```
+
+# Posetの情報幾何
+
+半順序のあるグラフ
+
+ノードに非負の値を与え、総和が1になるように標準化する。
+
+それをノード数の長さのベクトル $P=(p_1,...,p_n); p_i \ge 0, \sum_{i=1}^n p_i = 1$であらわすことにする。
+
+ここで、別の２つの値のとり方を導入する。
+
+$\Theta = (\theta_i)$, $H = (\eta_i)$
+
+ただし$P,\Theta,H$ともに、「足して1」などの制約があるので、実質的には$n_1$個の値を決めることで$n$個の値がすべて決まることに注意する。
+
+これら３つの値のとり方は、グラフ上の値のとり方という、ある１つの実体を表現する３つの方法であり、相互に１対１対応する。
+
+それぞれを$P,\Theta,H$-座標系と呼ぶ。
+

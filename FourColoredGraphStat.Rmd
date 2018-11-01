@@ -1,0 +1,207 @@
+---
+title: "4-colored graphの特徴量集計"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 球面平均曲率・ガウス曲率場を表すグラフ
+
+形を表す三角形メッシュグラフを正球に貼り付けた後、各三角形の平均曲率とガウス曲率の符号により、各ノードに${0,1,2,3}$のラベルを付与するものとする。
+ここで、同じラベルを持つ隣接ノードを融合し、簡略化するものとする。
+
+結果として、平面グラフ$G=(V,E)$が得られたものとし、頂点$V={v_1,...,v_n}$の要素には、ラベル$L={l_1,...,l_n}$が付与されているものとする。
+
+また、各頂点は、オリジナルグラフのノードが１個以上帰属しているが、その帰属ノードがオリジナルメッシュにおいて支配する領域の面積の和を取ったものを、$A={a_1,...,a_n}$とする。
+
+結局、ノードにラベルと面積の属性を持った集合の組が得られる。
+
+これを$F=(G=(V,E),L,A)$と書くことにする。
+
+試みに適当な値を振って$F$を作成してみる。
+
+```{r,echo=FALSE}
+# Generate a planar graph
+
+library(geometry)
+library(igraph)
+my.rplanar.graph <- function(n,n.col=4){
+	x <- matrix(runif(n*2),ncol=2)
+	d <- delaunayn(x)
+	edge <- rbind(d[,1:2],d[,2:3],d[,c(3,1)])
+	edge <- t(apply(edge,1,sort))
+	edge <- unique(edge)
+	lb <- sample(1:n.col,n,replace=TRUE)
+	
+	return(list(el=edge,x=x,lb=lb))
+}
+my.plot.delaunay <- function(g){
+	plot(g$x,pch=20,col=g$lb)
+	segments(g$x[g$el[,1],1],g$x[g$el[,1],2],g$x[g$el[,2],1],g$x[g$el[,2],2])
+}
+
+n <- 50
+g <- my.rplanar.graph(n)
+
+#my.plot.delaunay(g)
+
+
+# g is a list of edge list and label information
+my.fuse.2 <- function(g){
+  # make a graph object of igraph package from the edge list 
+	gl <- graph.edgelist(g$el,directed=FALSE)
+	# Adjacency matrix of the graph gl
+	ad <- get.adjacency(gl)
+	# number of label types
+	n.col <- max(g$lb)
+	# Make a list of nodes sharing the label
+	sub.nodes <- list()
+	for(i in 1:n.col){
+		sub.nodes[[i]] <- which(g$lb==i)
+	}
+	# Make subgraphs who shares label
+	sub.gls <- list() # List of subgraphs
+	comps <- list() # List of connected components information of each subgraph
+	
+	N <- 0 # sum of connected components over all labels
+	
+	for(i in 1:n.col){
+		sub.gls[[i]] <- induced_subgraph(gl,sub.nodes[[i]])
+		comps[[i]] <- components(sub.gls[[i]])
+		N <- N + comps[[i]]$no
+	}
+	col.comps <- list() # List of connected components
+	col <- rep(0,N) # label of each connected components
+	cnt <- 1
+	for(i in 1:n.col){
+		for(j in 1:comps[[i]]$no){
+			col.comps[[cnt]] <- sub.nodes[[i]][which(comps[[i]]$membership==j)]
+			col[cnt] <- i
+			cnt <- cnt+1
+		}
+	}
+	# Adjacency matrix of a graph whose nodes are connected components
+	AD <- matrix(0,N,N)
+	for(i in 1:(N-1)){
+		for(j in (i+1):N){
+			AD[i,j] <- sum(ad[col.comps[[i]],col.comps[[j]]])
+			AD[j,i] <- sum(ad[col.comps[[j]],col.comps[[i]]])
+		}
+	}
+	AD. <- matrix(as.numeric(AD>0),ncol=N)
+	
+	return(list(ad=AD.,col=col,sub.nodes=sub.nodes,sub.gls=sub.gls,col.comps=col.comps))
+}
+
+
+out <- my.fuse.2(g)
+#out$ad
+```
+
+ノードに色を着け、面積を大きさで表すと以下のようになる。
+```{r}
+G <- graph.adjacency(out$ad) # (V,E)
+L <- out$col
+A <- runif(length(out$col))
+```
+```{r}
+plot(graph.adjacency(out$ad),vertex.color=out$col,vertex.size=A*50)
+```
+
+# まずは記述統計してみる
+
+$F=(G=(V,E),L,A)$が得られたとき、以下の
+
+## ノードに関する記述統計
+
+* ノード数
+```{r}
+vcount(G)
+```
+
+* 色別ノード数
+```{r}
+tabulate(L)
+```
+
+* 面積分布
+```{r}
+
+my.dist <- function(A){
+  return(list(mean=mean(A),var=var(A),sorted = sort(A)))
+}
+my.dist(A)
+```
+
+* 色別面積分布
+
+```{r}
+my.dist.col <- function(A,L){
+  ret <- list()
+  for(i in 1:4){
+    ret[[i]] <- my.area.dist(A[which(L==i)])
+  }
+  return(ret)
+}
+my.dist.col(A,L)
+```
+
+* 次数分布
+
+```{r}
+my.dist(degree(G))
+```
+
+* 色別次数分布
+```{r}
+my.dist.col(degree(G),L)
+```
+## エッジに関する記述統計
+
+* エッジ数
+```{r}
+ecount(G)
+```
+
+* 両端ノードの色別エッジ数
+
+```{r}
+my.edge.col <- function(G,L){
+  el <- get.edgelist(G)
+  col.el <- matrix(L[el],ncol=2)
+  col.el <- t(apply(col.el,1,sort))
+  ret <- matrix(0,4,4)
+  for(i in 1:length(col.el[,1])){
+    ret[col.el[i,1],col.el[i,2]] <- ret[col.el[i,1],col.el[i,2]] + 1
+  }
+  #ret <- ret + t(ret)
+  return(ret)
+
+}
+my.edge.col(G,L)
+```
+
+* エッジが作るArea ペアの分布
+
+```{r}
+my.edge.areas <- function(G,A){
+  el <- get.edgelist(G)
+  area.el <- matrix(A[el],ncol=2)
+  return(area.el)
+}
+# その平均
+area.el <- my.edge.areas(G,A)
+#apply(area.el,1,mean)
+# その差
+#apply(area.el,1,function(x)abs(x[1]-x[2]))
+
+# それらの分布
+my.dist(apply(area.el,1,mean))
+my.dist(apply(area.el,1,function(x)abs(x[1]-x[2])))
+```

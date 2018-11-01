@@ -1,0 +1,26 @@
+# チューリングパターン
+
+https://www.youtube.com/watch?v=tgsGDBUnQ8c　
+
+# Automata
+https://www.youtube.com/watch?v=M4cV0nCIZoc 
+
+# 生物の模様
+
+https://www.youtube.com/watch?v=HKVzjbBW2yw　
+
+# 嗅上皮の配置
+
+http://www.kobe-u.ac.jp/NEWS/research/2016_02_29_01.html 
+
+# ライフゲーム、SmoothLife
+
+https://twitter.com/dama_math/status/787587139445850112/video/1 
+
+# パターンができる、ということなら、他にも
+
+https://www.google.co.jp/url?sa=t&rct=j&q=&esrc=s&source=video&cd=2&cad=rja&uact=8&ved=0ahUKEwi-1cr0jtDUAhWETbwKHWqaAwkQtwIIJjAB&url=http%3A%2F%2Fwww.nature.com%2Fncb%2Fjournal%2Fv16%2Fn1%2Ffig_tab%2Fncb2885_SV4.html&usg=AFQjCNHPn8EvfLA_257aVs2hr8TleE7Kbw 
+
+# 粘菌
+
+https://www.youtube.com/watch?v=RLOGWvqv8j8

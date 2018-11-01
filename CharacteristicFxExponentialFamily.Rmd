@@ -1,0 +1,199 @@
+---
+title: "特性関数・指数型分布族・情報幾何"
+author: "ryamada"
+date: "2018年1月18日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 指数型分布族
+
+```{r}
+my.make.exponential <- function(C,F,A){
+  list(C=C,F=F,A=A)
+}
+my.instance.exponential <- function(myexp,theta){
+  list(C=myexp$C,F=myexp$F,A=myexp$A,theta=theta)
+}
+my.value.exponential <- function(myins,x){
+  Cx <- myins$C(x)
+  Fx <- matrix(0,length(x),length(myins$F))
+  for(i in 1:length(Fx[1,])){
+    Fx[,i] <- myins$F[[i]](x)*myins$theta[i]
+  }
+  Atheta <- myins$A(myins$theta)
+  tmp <- Cx + apply(Fx,1,sum) - rep(Atheta,length(x))
+  return(exp(tmp))
+}
+```
+
+# 正規分布
+
+```{r}
+C.normal <- function(x){
+  return(rep(log(1/sqrt(2*pi)),length(x)))
+}
+F.normal <- list()
+F.normal[[1]] <- function(x){
+  return(x)
+}
+F.normal[[2]] <- function(x){
+  return(x^2)
+}
+A.normal <- function(theta){
+  return(-theta[1]^2/(4*theta[2]) - 1/2 * log(-2 * theta[2]))
+}
+
+NRM <- my.make.exponential(C.normal,F.normal,A.normal)
+mu <- 3
+s <- 2
+theta <- c(mu/s^2,-1/(2*s^2))
+NRM.1 <- my.instance.exponential(NRM,theta)
+
+x <- seq(from=-3,to=3,length=100)
+(NRM.1$F[[1]])
+```
+
+```{r}
+NRM.1.x <- my.value.exponential(NRM.1,x)
+NRM.2.x <- dnorm(x,mu,s)
+plot(NRM.1.x,NRM.2.x)
+plot(x,NRM.1.x)
+```
+
+# モーメント母関数と特性関数とその元となる関数
+
+モーメントは関数は $E\[e^{tX}\]$。
+
+特性関数は$E\[e^{itx}\]$。
+
+$e^{tx}$,$e^{itx}$は、確率変数。
+$X$の台$x$に関する関数と見れば、$t,x$の２つの異なる変数が定める関数。
+
+その期待値を取ると、$x$については集約され、$t$のみの関数となる。
+
+## $e^{tx}$と$e^{itx}$
+
+$e^{tx}$,$e^{itx}$は、どちらも、確率変数$X$から作られる次元が増えた関数。
+
+$e^{tx}$は次元が１つ増える。
+$e^{itx}$は次元が２つ(実と虚)増える。
+ただし、$e^{itx}$のとる値はMod=1に限定しているので、実は、複素数の「角度」の次元分(1)が増えているだけ。違いは、この角度の次元は周期性があること。
+
+結局、$e^{tx}$は実数無限空間という次元を1つ加えるのに対し、$e^{itx}$は単位円周に角度に相当する次元を1つ加えている。
+
+```{r}
+library(rgl)
+
+x <- seq(from=-3,to=1,length=100)
+t <- seq(from=-3,to=1,length=100)
+m <- 2
+s <- 3
+
+Px <- my.value.exponential(NRM.1,x)
+plot(x,Px,type="l")
+
+tx <- expand.grid(x,t)
+etx <- exp(tx[,1] * tx[,2])
+eitx <- exp(1i * tx[,1] * tx[,2])
+
+Mod(eitx)
+
+plot3d(tx[,1],tx[,2],etx)
+
+plot3d(tx[,1],tx[,2],Re(eitx))
+plot3d(tx[,1],tx[,2],Im(eitx))
+
+plot(Im(eitx),etx)
+
+plot3d(tx[,1],tx[,2],Arg(eitx))
+
+
+```
+
+## $E\[e^{tx}\]$と$E\[e^{itx}\]$
+
+
+```{r}
+my.eitx <- function(t,nrm,x=seq(from=-100,to=100,length=10^5),I=TRUE){
+  p <- my.value.exponential(nrm,x)
+  ret <- rep(0,length(t))
+  q <- 1
+  if(I){
+    q <- 1i
+  }
+  for(i in 1:length(ret)){
+    ret[i] <- sum(exp(q * t[i]*x) * p)/sum(p)
+  }
+  return(ret)
+}
+
+```
+
+```{r}
+t <- seq(from=-2,to=2,length=100)
+Eetx <- my.eitx(t,NRM.1,I=FALSE)
+Eeitx <- my.eitx(t,NRM.1,I=TRUE)
+```
+```{r}
+plot(t,Eetx)
+plot3d(t,Re(Eeitx),Im(Eeitx))
+```
+
+# 指数型分布族のlog-potential 関数とキュムラント
+
+パラメタ[tex:\theta]はベクトル、それを変化させるパラメタ[tex:t]もベクトル。
+
+その変化ベクトル[tex:t]に対して十分統計量[tex:F(x)]の線形和変数に関して、log partition関数が、ただそれだけで、特性関数を決める。
+
+ここで十分統計量の線形和変数というのは、[tex:\theta]が定めるある特定の指数型分布族確率分布に対応する。
+
+結局、指数型分布族が作っている分布の多様体のそれぞれの上に特性関数が定まっており、特性関数は、十分統計量が決める任意の確率変数のモーメント母情報をすべて持っているので、確率分布の変化具合ももれなく決まる。
+
+とくに、個々の十分統計量を分離して、その１次モーメントの期待値を考えることもできるが、それは、情報幾何における、[tex:\eta]座標に相当する。
+
+逆に言うと、十分統計量の取り方が決まっていて、それの期待値を決めてやると([tex:\eta]座標を決めてやると)、分布自体が確定するし(この指数型分布族は座標系の自由度しか持たない)し、それを決めているのもlog partition関数という、[tex:\theta]によってのみ決まる関数であることもわかる。
+
+
+$$
+E[e^{i\sum t_j F_j(x)}|\theta] = \int e^{i \sum t_j  F_j(x)} exp^{C(x) + \sum F(x)_j \theta_j - \psi(\theta)}dx = e^{\psi(\theta + i t) - \psi(\theta)}
+$$
+
+```{r}
+my.exp.cumulant <- function(t.mat,myins,I=TRUE){
+  ret <- rep(0,length(t.mat[,1]))
+  q <- 1
+  if(I){
+    q <- 1i
+  }
+  Atheta2 <- myins$A(myins$theta)
+  for(i in 1:length(ret)){
+    Atheta1 <- myins$A(myins$theta+q*t.mat[i,]+0*1i)
+    ret[i] <- Atheta1 - Atheta2
+  }
+  return(exp(ret))
+}
+```
+```{r}
+NRM.1$A(NRM.1$theta+0*1i+1)
+```
+```{r}
+t <- seq(from=-2,to=2,length=100)
+t.mat <- cbind(t,rep(0,length(t)))
+# ここで、t.matのうち、第一十分統計量だけを変化させ、第二十分統計量を固定してやれば、第一十分統計量がXそのものなので、確率変数Xの特性関数がlog-partition関数から出ることも示せる
+Eetx2 <- my.exp.cumulant(t.mat,NRM.1,I=FALSE)
+Eeitx2 <- my.exp.cumulant(t.mat,NRM.1,I=TRUE)
+```
+```{r}
+plot(t,Eetx2)
+```
+```{r}
+plot(Re(Eeitx),Re(Eeitx2))
+```

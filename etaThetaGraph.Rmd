@@ -1,0 +1,160 @@
+---
+title: "eta-theta-graph"
+output: html_document
+---
+
+# $\eta$-$\theta$グラフ
+
+連結無向グラフ$G$があったとき、あるノードをルートとし、ポセットを作り、そのポセットに対応して、$G$上の一様確率質量分布に対する$\eta$,$\theta$座標を算出し、それを、そのポセットの『中心$\eta$座標』『中心$\theta$座標』と呼ぶことにする。
+
+今、$G$のすべてのノードについて『中心$\eta$座標』『中心$\theta$座標』を算出し、その座標をノードの座標と看做すと、$G$が、『座標付きグラフ』となる。
+
+これを、$G$の$\eta$-グラフ、$G_\eta$、$G$の$\theta$-グラフ、$G_\theta$と呼ぶことにする。
+
+$G_\eta$,$G_\theta$について、何かしらのスカラー量をとることを考える。
+
+もし、オリジナルの$G$が閉曲面グラフであったなら、$G_\eta,G_\theta$の表面積はそのようなスカラー量である。
+
+このスカラー量は何かしら$G$の対称性を表している可能性がある。
+
+なぜならば、$G$がどのノードをルートにとっても同じポセット構造をもたらすような、高度な対象性を持っているとき、$G_\eta,G_\theta$のすべてのノードの座標は同一となり、このスカラー量はゼロになり(かと思ったが、これは嘘)、もし、$G$がルートノードの取り方に関して非対称であれば、このスカラー量はゼロから正の方向にずれるからである。
+
+
+対称性は、現れる中心$\eta$座標、中心$\theta$座標の分布をPCA分解して、その固有値の均一度とか？
+
+
+
+# やってみる
+
+# まず、$G$から全ノードの『中心$\eta$座標』『中心$\theta$座標』を返す関数を作る
+
+```{r}
+library(igraph)
+# グラフgに対して、ルートノードrhoのためのゼータ行列を返す関数
+my.zeta <- function(g,rho){
+  D_rho <- distances(g,v=rho)
+  A <- as.matrix(get.adjacency(g))
+  A_poset <- A
+  for(i in 1:nv){
+    for(j in 1:nv){
+      if(D_rho[i] >= D_rho[j]){
+        A_poset[i,j] <- 0
+      }
+    }
+  }
+  g_poset <- graph.adjacency(A_poset)
+  zeta <- distances(g_poset,mode="out")
+  zeta[which(is.infinite(zeta))] <- 0
+  zeta <- matrix(zeta>0,nv,nv) + 0
+  diag(zeta) <- 1
+  return(zeta)
+}
+# rhoをルートに取ったときの『中心eta, theta座標』を返す関数
+my.etaTheta.coords<- function(g,rho){
+  zeta <- my.zeta(g,rho)
+  nv <- length(V(g))
+  P <- rep(1/nv,nv) # 中心は一様確率質量分布
+  eta <- zeta %*% P
+  theta <- solve(zeta) %*% log(P)
+  return(list(eta=eta,theta=theta))
+}
+# ルートノードを取り替えて、それぞれの『中心eta, theta座標』を返す関数
+my.etaTheta.coords.list <- function(g){
+  nv <- length(V(g))
+  thetas <- etas <- matrix(0,nv,nv)
+  for(i in 1:nv){
+    tmp <- my.etaTheta.coords(g,i)
+    thetas[,i] <- tmp$theta
+    etas[,i] <- tmp$eta
+  }
+  return(list(etas=etas,thetas=thetas))
+}
+```
+
+
+# $G_\eta$,$G_\theta$スカラー量
+
+たとえば、$G_\eta$,$G_\theta$のスカラー量として、エッジ総長を考えることにする。
+
+```{r}
+my.edge.len <- function(g,coords){
+  el <- get.edgelist(g)
+  #print(el)
+  e.len <- rep(0,length(coords[,1]))
+  for(i in 1:length(e.len)){
+    e.len[i] <- sqrt(sum((coords[,el[i,1]] - coords[,el[i,2]])^2))
+  }
+  return(list(elsum =sum(e.len),elen = e.len))
+}
+```
+
+# お試し
+
+ランダムにグラフを作る。
+
+```{r}
+nv <- 8
+loop <- TRUE
+while(loop){
+  t <- runif(1) + 1
+  A <- matrix(runif(nv^2),nv,nv)
+  A <- A + t(A)
+  diag(A) <- 0
+  A <- matrix(A > t, nv,nv) + 0
+  g <- graph.adjacency(A,mode="undirected")
+  if(is.connected(g)){
+    loop <- FALSE
+  }
+}
+plot(g)
+eta.theta.center <- my.etaTheta.coords.list(g)
+```
+```{r}
+eta.theta.center
+```
+
+```{r}
+qr(eta.theta.center$etas)
+```
+
+```{r}
+elen.eta <- my.edge.len(g,eta.theta.center$etas)
+elen.theta <- my.edge.len(g,eta.theta.center$thetas)
+```
+
+```{r}
+elen.eta
+elen.theta
+```
+
+# 対象的なグラフでやってみる
+
+円周状のグラフ
+
+```{r}
+nv <- 100
+ad <- diag(rep(1,nv))
+ad <- ad[c(2:nv,1),]
+g2 <- graph.adjacency(ad,mode="undirected")
+plot(g2)
+```
+
+```{r}
+eta.theta.center2 <- my.etaTheta.coords.list(g2)
+elen.eta2 <- my.edge.len(g2,eta.theta.center2$etas)
+elen.theta2 <- my.edge.len(g2,eta.theta.center2$thetas)
+```
+
+```{r}
+qr(eta.theta.center2$etas)
+elen.eta2
+elen.theta2
+```
+
+```{r}
+eta.theta.center2
+```
+
+```{r}
+plot(eigen(eta.theta.center2$etas)[[1]])
+```

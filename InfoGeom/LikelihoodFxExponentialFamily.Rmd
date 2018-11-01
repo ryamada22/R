@@ -1,0 +1,171 @@
+---
+title: "尤度関数の空間 Space of Likelihood function"
+author: "ryamada"
+date: "2017年2月24日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE)
+library(rgl)
+knit_hooks$set(rgl = hook_webgl)
+```
+
+# 尤度関数 Likelihood function
+
+サンプル$X =\{x_i\} \in \mathbf{R}^n$ があるとき、ある正規分布 $N(\mu,\sigma^2)$ からのサンプルだと考えると、その尤度は
+
+Assume a sample set $X =\{x_i\} \in \mathbf{R}^n$ from a normal distribution $N(\mu,\sigma^2)$, then its likelihood function is;
+
+
+$$
+L(\mu,\sigma^2|X) = \prod_{i=1}^n f(x_i|\mu,\sigma^2),
+$$
+
+ただし、where,
+$$
+f(u|\mu,\sigma^2) = \frac{1}{\sqrt{2\pi \sigma^2}} e^{-\frac{(u-\mu)^2}{2\sigma^2}} .
+$$
+
+対数尤度関数は The log-likelihood function is;
+$$
+l(\mu,\sigma^2|X) = \log{L(\mu,\sigma^2|X)} = \sum_{i=1}^n \log{f(x_i|\mu,\sigma^2)}\\
+= -\frac{n}{2} \log{2\pi} - n\log{\sigma} - \frac{1}{2\sigma^2} \sum_{i=1}^n(x_i-\mu)^2 .
+$$
+
+## Exercise 1
+
+### Exercise 1-1
+
+$X={3,4,6}$のときの$l$を$\mu\in [-5,5]$,$\sigma \in (0,5)$ について3次元プロットで描け。
+
+Draw a $l$ 's surface in 3D for $\mu\in [-5,5]$,$\sigma \in (0,5)$ .
+
+# 指数型分布族とパラメタ変換 Exponential family and parameter transformation
+
+## 指数型分布族 Exponential family
+
+尤度関数・確率密度関数 The likelihood function/probability function is to be transformed as follows.
+$$
+f(x|\mu,\sigma^2) = \frac{1}{\sqrt{2\pi \sigma^2}} e^{-\frac{(x-\mu)^2}{2\sigma^2}}
+$$
+を次のように変換することにする。この形を「指数型」と呼ぶ。
+The transformed fucntion should be expressed as;
+
+$$
+f(x) = e^{g(x)}
+$$
+
+Because of this expression, this form is called "exponential" form.
+
+Because,
+$$
+\log{f(x)} = \log{e^{g(x)}}\\
+= g(x)
+$$
+
+したがって, then
+
+$$
+g(x) = \log{f(x)}\\
+= \log{\frac{1}{\sqrt{2\pi \sigma^2}}}  -\frac{(x-\mu)^2}{2\sigma^2}
+$$
+
+## パラメタ変換 Parameter transformation
+
+ここで、$x$ について整理する。
+
+Rewrite the formula as the function of x.
+
+$$
+g(x|\mu,\sigma) = -\frac{1}{2\sigma^2} x^2\\
++ \frac{\mu}{\sigma^2} x \\
+-\frac{\mu^2}{2\sigma^2} -\log{\sigma} \\
+- \frac{1}{2} \log{2\pi}
+$$
+これを、$x$ と $\mu,\sigma$とが絡む項と、それらが分離されている項とに分けて次のように書くことにする。
+
+Note it can be decomposed into the term that is a mixture of $x$ and $\mu,\sigma$, and the term only with $\mu,\sigma$ and the term without $\mu,\sigma$ as below.
+
+$$
+g(x|\mu,\sigma) = (\frac{\mu}{\sigma^2},-\frac{1}{2\sigma^2}) \cdot \begin{pmatrix} x\\ x^2 \end{pmatrix} \\
+- A(\mu,\sigma) \\
+- B(x),\\
+A(\mu,\sigma) = \frac{\mu^2}{2\sigma^2}+\log{\sigma},\\
+B(x) = \frac{1}{2}\log{2\pi} 
+$$
+
+次のような変換をすると
+Parameter transformation below will make it simpler.
+$$
+(\frac{\mu}{\sigma^2},-\frac{1}{2\sigma^2}) \to (\theta_1,\theta_2)
+$$
+次のように簡潔な表現になる。
+
+$$
+g(x|\mu,\sigma) = (\theta_1,\theta_2) \cdot \begin{pmatrix} x\\ x^2 \end{pmatrix} \\
+- A(\theta_1,\theta_2) \\
+- B(x),\\
+A(\theta_1,\theta_2) = -\frac{\theta_1^2}{4\theta_2} - \frac{1}{2}\log{(-2\theta_2)}
+$$
+
+## 指数型分布族の表現 Expression of exponential family
+
+結局、以下のような形にまとめられた。
+It is in the shape as below.
+$$
+\log{f(x)}= g(x) = h(\mathbf{\theta})^T \cdot T(x) -A(\mathbf{\theta}) - B(x)
+$$
+ただし、where
+$$
+h(\mathbf{\theta}) = \mathbf{\theta} = \begin{pmatrix} \theta_1\\ \theta_2 \end{pmatrix}\\
+T(x) = \begin{pmatrix}x\\x^2 \end{pmatrix}\\
+A(\theta_1,\theta_2) = -\frac{\theta_1^2}{4\theta_2} - \frac{1}{2}\log{(-2\theta_2)}\\
+B(x) =  \frac{1}{2}\log{2\pi} 
+$$
+$$
+\theta_1 = \frac{\mu}{\sigma^2}\\
+\theta_2 = - \frac{1}{2\sigma^2}
+$$
+
+逆に also,
+$$
+\mu = = -\frac{\theta_1}{2\theta_2}\\
+\sigma = \sqrt{-\frac{1}{2\theta_2}}
+$$
+
+ここで
+$$
+h(\mathbf{\theta}) = \mathbf{\theta} = \begin{pmatrix} \theta_1\\ \theta_2 \end{pmatrix}
+$$
+が最も簡単な形にまとめられているので、このような$h(\mathbf{\theta})$の取り方での表現をCanonical form (標準型、正準型)と呼ぶ。
+
+Because $h$ is the simplest, this expression is called canonical form.
+
+## Exercise 2
+
+### Exercise 2-1 指数型分布族の例 Examples of exponential family
+
+非常に多くの理論確率分布が含まれる。どのような分布が含まれるか確認せよ。https://en.wikipedia.org/wiki/Exponential_family 
+
+There are very many theoretical probability functions in exponental family. See the URL above.
+
+### Exercise 2-1 Canonical formの導出 Derive canonical form
+
+3つの分布をhttps://en.wikipedia.org/wiki/Exponential_family　より選び、そのCanonical formを通常のパラメタ表現から導け。
+
+Select three distributions from the site and derive their canonical form.
+
+### Exercise 2-3 ヤコビ行列 Jacobian matrix
+
+正規分布のパラメタ変換 We changed the parameters of normal distribution.
+$$
+\theta_1 = \frac{\mu}{\sigma^2}\\
+\theta_2 = - \frac{1}{2\sigma^2}
+$$
+におけるヤコビ行列を求めよ。Show its Jacobian matrix. 

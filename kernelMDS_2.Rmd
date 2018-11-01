@@ -1,0 +1,1484 @@
+---
+title: "kernelMDS"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#1. Introduction
+Flow cytometry (referred to as FACS) is one of the comprehensive measurement technique capable of investigating the expression level of the surface marker of individual cells and is widely used in many fields of lifescience.
+
+In recent years, a field called computational flow cytometry that treats FACS data as multidimensional data and applying an information scientific approach has developed (Saeys et al., 2016), and many method such as SPADE (Qiu et al., 2011), viSNE (Amir et al., 2013 ) and Wanderlust (Bendall et al., 2014) and so on have been successful. However, most of these methods are for identifying and visualizing cell subsets for a single FACS data,and the method of quantifying the features of the each of whole cell profile for multiple FACS data is limited. One of the reasons is considered that FACS data needs to be handled as data points sampled from multidimensional probability distribution. It is difficult to apply the statistical method or learning method which analyzes the relation with other type of data to these distributed data type. Then, it is important to extract feature statistics from these and consuct dimensionaly reduction.
+
+On the other hand, there are several prior studies on a method to quantify the distance between probability distributions nonparametrically and to reduce dimension of them (Delicado et al, 2011, Carter et al, 2008).In these studies,  using distance metrics based on KL-divergence, distance matrix can be generated between distributited data. Next each data is mapped to low dimensional space by applying multidimensional scaling (MDS) method to distance matrix .There is also prior studies applying this method to flow cytometry data (Finn et al, 2008). However, with this method, it is unclear how the coordinate axis extracted to data-driven explains the difference in which part on the original coordinate space.
+
+In this research, we propose a new method to extract feature statistics by approximating each population distribution with an exponential distribution family, when data points sampled from multiple unknown probability distributions are being observed.
+The exponential distribution family is a probability distribution that can be expressed by the following equation.
+$$
+\log{P(x|\theta)} = C(x) + \sum_{i=1} F_i(x) \theta_i - \psi(\theta)
+$$
+where $P(x|\theta)$ is the probablistic density funcion, C(x) is the function of x only, $\theta$ is the scalar value vector given for each distribution, $\theta_i$ is the i-the element of $\theta$ and $F_i(x)$ is the the coeficient function of $\theta_i$ and  $\psi(\theta)$ is the the function of $\theta$ which is set so that $P(x|\theta)$ satisfies the definition of the probability density distribution.
+If a distribution can be expressed as an exponential distribution family, $\theta$ coordinates can be given to it and it is able to map it to low dimensional space.
+
+ In this paper, we show that θ is estimated as the feature statistic of each distribution, and the coefficients F and C are estimated from the data.First, it is assumed that the population distribution is an exponential distribution family, and we propose a method of directly estimating the Euclidean distance in the theta coordinate system from the data points sampled by using the kernel method.
+Next, multidimensional scaling is applied to the distance matrix between the samples construcb this method so tha we can estimate the θ coordinate.Finally, using the probability density function of the population estimated non-parametrically from the data points and the estimated θ coordinate, $C(x)$ and $F_i(x)$ are calculated.The θ obtained in this way can be treated as the feature statistic of the population distribution itself,By examining the coefficient $F_i(x)$, it is possible to comprehensively know in which part of the original multidimensional space the feature statistic explains the difference.
+
+ In this study, we applied our method artifitial data and real data in order to validate our method. First, I applied it to a set of multiple one-dimensional normal distributions with different mean and standard deviation,we showed that the proposed method is valid as a method to extract feature statistics of population distribution. Next, it is applied to artificial data sampled from one-dimensional mixed normal distribution, and six-dimensional mixed normal distribution imitating FACS data, so that our method is useful in he situation that data is sampled from mixture normal distribution  which often appears in life science data.Finally, it applied to the 6-dimensional FACS data before and after influenza vaccination and comprehensively identified the pattern of lymphocyte subsets associated with the characteristic statistic associated with the immune response.The method proposed in this research was considered to be effective as a method to extract feature statistics of population distribution from distribution type data like FACS.
+
+#2. Method
+#2.1 Theory
+There are specimens from an unknown distribution. We show the approximate estimation of the population distribution of the observed data using the exponential distribution family as follow
+$$
+\log{P(x|\theta)} = C(x) + \sum_{i=1} F_i(x) \theta_i - \psi(\theta)
+$$
+Then, this can be expressed as follow
+$$
+\log{P(x|\theta)} = \sum_{i=0} F_i(x) \theta_i - \psi(\theta)\\
+F_0(x) = C(x), \theta_0 =Const
+$$
+
+On the other hands, the inner product between two probablistic density functions $P_1(x|\theta_1)$ and $P_2(x|\theta_2)$ is expressed in the following.
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int P_1(x|\theta_1)P_2(x|\theta_2)dx
+$$
+ Also, this can be approximated using probability density value of the unctions and kernel function as follow:
+ 
+ $$
+ <P_1(x|\theta_1),P_2(x|\theta_2)>\  \approx  \frac{1}{NM}\sum_i^N \sum_j^M P_1(x_i|\theta_1)P_2(x_j|\theta_2) K(x_i,x_j)
+ $$
+ where N and M are the number of grids of $P_1(x|\theta_1)$ and $P_2(x|\theta_2$, $P_1(x_i|\theta_1)$ and $P_2(x_j|\theta_2$ is the probablistic density value of  $P_1(x|\theta_1)$ of i-th grid and  probablistic density value of  $P_2(x|\theta_2)$ of j-th grid, $K(x_i,x_j)$ is the Kernel function, which define the distance between the location of grid.
+This can be estimated using observed data points sampled from $P_1$ and $P_2$ as follow.
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{n_1 n_2} \sum^{n_1}_i\sum^{n_2}_j{K(s^1_i, s^2_j)}
+$$
+where $n_1$ amd $n_2$ are the number of data points from $P_1$ and $P_2$, $s^1_i$ is the observed valu of i-th datapoints from $P_1$ and $s^2_j$  is the observed valu of j-th datapoints from $P_2$.
+Then, the inner product of the exponential distribution family is deformed by the following procedure
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int P_1(x|\theta_1)P_2(x|\theta_2)dx\\
+
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int e^{\sum_{i=0} F_i(x) \theta_{1,i} - \psi(\theta_1)}e^{\sum_{i=0} F_i(x) \theta_{2,i} - \psi(\theta_2)}dx\\
+
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int e^{\sum_{i=0} F_i(x) (\theta_{1,i}+\theta_{2,i})  - (\psi(\theta_1) + \psi(\theta_2))}dx\\
+
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) (\theta_{1,i}+\theta_{2,i})}dx
+$$
+When set $\theta_1 + \theta_2 = \theta_{1+2}$, above equation is expressed as 
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i}}dx\\
+$$
+And following equation is hold.
+
+$$
+\int P(x|\theta_1) dx = \int e^{\sum_{i=0} F_i(x) \theta_{i} - \psi(\theta)} dx = 1\\
+\int e^{\sum_{i=0} F_i(x) \theta_{i}} dx  = e^{\psi(\theta)}
+$$
+
+Then, the inner product between expornential family are expresed as,
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x)\theta_{1+2,i}}dx\\
+
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i} - \psi(\theta_{1+2})}e^{\psi(\theta_{1+2})}dx\\
+
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{e^{\psi(\theta_{1+2})}}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i} - \psi(\theta_{1+2})}dx\\
+
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{e^{\psi(\theta_{1+2})}}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}}
+$$
+In this case, potential function $\psi(\theta)$ is set as follow
+$$
+\psi(\theta) = <\theta,\theta> = \sum_i \theta_i^2
+$$
+
+Then, the inner product in the θ coordinate system can be calculated from the inner product estimated using kernel method as follows.
+$$
+\log{(<P_1(x|\theta_1),P_2(x|\theta_2)>)} = 2 <\theta_1,\theta_2>
+$$
+Then, the Euclidean distance in the θ coordinate system between distributions $<\theta_1-\theta_2,\theta_1-\theta_2>$ can be expressed as follows.
+
+$$
+<\theta_1-\theta_2,\theta_1-\theta_2> = <\theta_1,\theta_1> + <\theta_2,\theta_2> - 2 <\theta_1,\theta_2>
+$$
+From the above calculation, the distance matrix between distributions can be estimated from observation data.By applying multi dimensional scaling (MDS) to this distance matrix, the feature statistics of population distribution are gain. We call this coordinates as MDS coordinates and adopt the MDS coordinates with top k eigen value as feature statistics of distributions. Also we call these MDS coordinate as MDS1, MDS2~MDSk sorted by contribution ratio in descending order. By the above series of procedures, it is possible to reduce the dimension and extract feature statistics of population distribution from observation data whose population distribution is unknown.
+
+Now, MDS coordinate value of each sample is calculated from data. Next, we try to express population distribution using exponential distribution family by  substituting $MDS_i$ for $\theta_i$. Now, in the equation $log(P)=C(x) + \sum_{i=1}^k F_i(x) MDS_i - \psi(MDS)$, MDS coordinates and 
+$\psi(MDS)$ is already known and population distribution P can be estimated by setting apropriate grids and applying k-nearest neighbor method.
+Unknown term $C(x)$ and $F_i(x)$ can be calculated as following procedure. 
+
+$$
+log(P^{knn}(x))=C(x) + \sum_{i=1}^k F_i(x) MDS_i - \psi(MDS)\\
+
+\psi(MDS)=\sum_{i=1}^k  MDS_i^2
+$$
+In order to treat this calculation discretely by a computer, the above expression need to be expressed in matrix form.
+Then,
+$$
+\begin{eqnarray}
+\log\bf P^{knn}= \bf C + \bf F \Theta- \bf \Psi
+\end{eqnarray}
+$$
+where $\bf P^{knn}$ are is m by n matrix which represent discretized probability density function by m grid of n samples, $\bf C$ is also m by n matrix which correspond to discretized C(x) and all columns have the same column vector, $\bf F$ is m by k matrix whose column vector correspond to discretized $F_i(x)$ and $\bf \Theta$ is k by n matrix which represent MDS coordinate value of n samples, and $\bf \Psi$ is m by n matrix which correspond to  $\psi(MDS)$ and $\Psi_{.,i}$ has all same values calculated by each sample.This equation is expressed as follow.
+The grid is set by dividing the maximum value and the minimum value of the observed data points at equal intervals for each coordinate axis.
+
+$$
+\begin{eqnarray}
+\bf P' = \bf F'\bf \Theta'
+\end{eqnarray}
+$$
+where $\bf P'=log(\bf P^{knn}) + \bf\Psi$, $\bf F'$ is the m by (k+1) matrix made by column join of $\bf F$ and $\bf C$,  $\bf \Theta'$ is the (k+1) by n matrix made by row join of $\bf \Psi$ and $\bf 1$ which represents a vector, all of whose elements are 1.
+This equation can be transformed as follows
+$$
+\bf P' = \bf F'\bf \Theta'\\
+
+\bf P' {\bf\Theta}'^T= \bf F'\bf \Theta'{\bf\Theta}'^T\\
+
+\bf F'=\bf P' {\bf\Theta}'^T(\Theta'{\bf\Theta}'^T)^{-1}
+$$
+From the above equation, $ F_i (x) $ and $ C (x) $ discretized with m grid can be calculated using $ P ^ {knn} $ and MDS coordinates. This $ F_i (x) $ has information on how much the $ MDS_i $ contributes to the difference of the distribution.
+
+#2.2 Simulation data analysis
+First, we test our method by applying it to data sampled from various normal distributions.
+Normal distribution is known to be one of the exponential distribution family.
+We generated multiple normal distributions, whose $\mu_i$ and $\sigma^2_i$ , mean and variance value of i-th distribution, are decided by random value sampled from normal distribution and Inverse gamma distribution which are known as prior distribution of these parameters.
+
+$$
+\mu_i \sim Normal(\mu^{s},\sigma^{s})\\
+\sigma^2_i \sim InvGamma(\alpha^{s},\beta^{s})
+$$
+where $\mu^{s},\sigma^{s},\alpha^{s},\beta^{s}$ are the fixed perameter given for each distribution set.
+Normal distribution parameter set [$\mu_i$ and $\sigma^2_i$] is generated. Then, n data points were sampled from each of ten normal distribution included in the distribution set. So, $x_{i,j}$ is j-th datapoints from i-th normal distribution, which is generated as artificial data
+
+$$
+x_{i,j} \sim Normal(\mu_i,\sigma_i)\\
+$$
+ We applied our algorythm for these input data to test performance. First, We make one distribution set where the parameter of normal distribution $[\mu^s,\sigma^s]$ is [0,4] , and The parameter of Inverse gamma distribution $\alpha,\beta$ is [10,5] (Distribution set A). And from each distribution indlude in distribution set A, we randomly sampled 1000 data points. Using this dataset as input data, we applied our method and extract feature statistics and evaluate performance by compairing true distribution with reprodiced distribution.
+ 
+ Next,the number of data points is changed [300,1000,2000,3000,8000] and the inluence on performance was evaluated, where the number of disributions is 10, The parameter of normal distribution $[\mu^s,\sigma^s]$ is [0,4] , and The parameter of Inverse gamma distribution $\alpha,\beta$ is [10,5] (Distribution set A). 
+ 
+ Finally, in addition to distribution set A, four distribution sets (distribution set B ~ E) were created under different conditions. Distribution set B  consists of 50 distributions while distribution set A consists of 10. In distribution set C contain the 2 distribution with high mean value as outlier, which is sampled from $Normal(10,4)$. Distribution set D consists of distributions with higher variance than other distribution sets because of $\sigma^2_i$ is sampled because $[\alpha.\beta]$ is [5,10]. Distribution set E consists of distributions with various mean value because $\sigma^{s}$ is 10. We sampled 1000 datapoints from these 5 distribution set A ~ E, applyed our method to these dataset and compair Performanse Index each other to investigate the nature of our method.
+
+Table1. The parameter setting of distribution set A~E
+```{r,eval=TRUE}
+tab <- matrix(c("Distribution set","The number of distribution","The parameter of normal distribution","The parameter of Inverse gamma distribution",
+                "A",10,"(0,4)","(10,5)",
+                "B",50,"(0,4)","(10,5)",
+                "C",10,"(0,4) and partially (10,4)","(10,5)",
+                "D",10,"(0,4)","(5,10)",
+                "E",10,"(0,10)","(10,5)"),6,4,byrow=T)
+print(tab)
+```
+
+ Next,we make distribution set of one dimensional mixture normal distributions as follow:
+$$
+\mu_{i,1} \sim Normal(0,0.5)\\
+\mu_{i,2} \sim Normal(4,0.5)\\
+\sigma^2_{i,1},\sigma^2_{i,2} \sim InvGamma(\alpha^{s},\beta^{s})\\
+[r_{i,1},r_{i,2}] \sim Direclet(0.5,0.5)\\
+x_{i,j} \sim r_{i,1} \times Normal(\mu_{i,1},\sigma_{i,1})+r_{i,2} \times Normal(\mu_{i,2},\sigma_{i,2})
+$$
+This situation assumes the case of experimental data of life science.The generated distributions are a bimodal distribution with similar peak positions, but its composition ratio is different. In addition, the average value and variance of the composition distribution also differ somewhat depending on experimental conditions and the like. Ten distibution, that is i=1~10, are generated and 5,000 data points is sampled from each distiburion. In this case, we used fixed values for paramerers of Inverse Gamma distribution $\alpha^{s}=10$,$\beta^{s}=5$.
+
+Finally, we make distribution set of six dimensional mixture normal distributions, which mimic FACS data measuring six surface markers.
+Artifitial data is generated as follow:
+$$
+{\boldsymbol \mu_{1}},{\boldsymbol\mu_{2}},{\boldsymbol \mu_{3}} \sim Normal({\bf 0},{\bf I})\\
+\sigma^2_{l,1},\sigma^2_{l,2},\sigma^2_{l,3} \sim InvGamma(\alpha^{s},\beta^{s})\\
+[r_{i,1},r_{i,2},r_{i,3}] \sim Direclet(1,1,1)\\
+{\bf x_{i,j}} \sim r_{i,1} \times Normal({\boldsymbol\mu_{i,1}},{\bf\Sigma_{i,1}})+r_{i,2} \times Normal({\boldsymbol\mu_{i,2}},{\bf\Sigma_{i,2}})+r_{i,3} \times Normal({\boldsymbol\mu_{i,3}},{\bf\Sigma_{i,3}})
+$$
+where ${\boldsymbol \mu_{i,1}},{\boldsymbol\mu_{i,2}},{\boldsymbol \mu_{i,3}}$ are mean vector of three component distributions of i-th sample which is the six length vector sampled from six-dimensional normal distribution, $\sigma^2_{i,l,1},\sigma^2_{i,l,2},\sigma^2_{i,l,3}$ are variance of i-th sample's l-th marker expression values of three component distribution $r_{i,1},r_{i,2},r_{i,3}$ are ratio of three component distributions, ${\bf\Sigma_{i,1}},{\bf\Sigma_{i,2}},{\bf\Sigma_{i,3}}$ are 6 by 6 covariance matrix of component distribution, whose [l,l] component is $\sigma^2_{l,1},\sigma^2_{l,2},\sigma^2_{l,3}$, and other component is 0. In this case, we asume that the artifitial FACS data is mixture distribution of three component six-dimensional normal distributions and only mixture ratio of these are different. And we also assume that there are no corelation between diferent markers.
+ We generated ten distributions, and from each distibution we sampled 1,000 data points.In this case, we used fixed values for paramerers of Inverse Gamma distribution $\alpha^{s}=10$,$\beta^{s}=5$.
+
+After applying proposed method to these  artifitial data, we adopted feature statistics $MDS_1$ ~ $MDS_k$, calculated $C(x)$ and $F_i(x)$, we can reproduced the population distribution $P^{est}$as an approximated exponential distribution family as follow.
+$$
+P^{est}(x)=exp(C(x) + \sum_{i=1}^k F_i(x) MDS_i - \psi(MDS))
+$$
+
+We evaluted by The performance of dimensionaly reduction using our difined Performance Index, which is based on KL-divregence between true probablistic density distribution $P^{true}$ and reproduced probablistic density distribution $P^{est}$.
+This is originally defines as:
+$$
+KL(P^{true}||P^{est})=\int P^{true}\log (\frac{P^{true}}{P^{est}})
+$$
+However, $P^{true}$ and $P_{est}$ is discretized within a specified range.
+Then, We define Performance Index as follow
+$$
+Performance\ Index = \| \sum_l{\bf P^{true}_l \times log\frac{\bf P^{true}_l}{\bf P^{est}_l}}\|
+$$
+where $\bf P^{true}_l$ and \bf P^{est} are the value of the pobablistic density distribution $P^{true}$ and $P^{est}$ of l-th grid.
+The smaller this index is, the better he performance of dimensionaly reduction by fitting expornential family is.
+
+#2.3 Real flow-cytometry data analysis
+Finally, the proposed method was applied to actual data of FACS. FACS data was derived from Nagahama Cohort Study, measured for the persons before and after influenza vaccination. We used data of ten subjects with 4 fold change of titer between before and 7 days after vaccination were randomly selected. Then in this study, a total of 20 flow cytometry data measured 100,000 cells in peripheral blood before (Day 0) and after (Day 7) influenza vaccination was used. In these FACS data, six cell surface markers (CD19, IgM, IgD, CD21, CD27, CD138) necessary for classification of B cells are measured. As pre-processing, each FACS data is processed with compensation and normalization of arsinh transformation of inverse hyperbolic function for each marker. We used R flowCore package (Hahne et al., 2009) for these calculations. Subsequently, lymphocyte gating is performed on each FACS data using R flowdensity package (Malek et al., 2014), and only the lymphocytes are targeted in the subsequent analysis.We applied our method to these FACS data, and calculated their MDS coordinate values and plot these into two dimensional space. In addition, by examining  top grids having a maximam value and a minimum value of $F_i(x)$, which identified B cell subsets that are strongly contributing to differences along each MDS coordinate axis.
+ 
+
+#3. Result
+```{r,eval=TRUE}
+library(TDA)
+library(MCMCpack)
+
+#?��つの�?�?の�?ータ点から、ガウシアンカーネルを用�?て�?積を計算する関数
+ip_from_point_Gau <- function(dp_P,dp_Q,gam=0.01){
+  dp_P <- as.matrix(dp_P)
+  dp_Q <- as.matrix(dp_Q)
+  np <- as.numeric(nrow(dp_P))
+  nq <- as.numeric(nrow(dp_Q))
+  ip_est <- 0
+  for(i in 1:np){
+    ip_est <- ip_est + sum(exp(-rowSums(sweep(dp_Q,2,dp_P[i,])^2)*gam))
+  }
+  ip_est <- ip_est/(np*nq)
+  return(ip_est)
+}
+
+#正規�??�?のmu,sdを指数型�??�?族表記�?�ita1,sita2に変換する関数
+convert_gau <- function(mu,sd){
+  sita1 <- mu/sd^2
+  sita2 <- -1/(2*sd^2)
+  return(c(sita1,sita2))
+}
+
+#Convert sita1, sita2, mu,sd
+convert_gau <- function(sita1,sita2){
+  sita1 <- mu/sd^2
+  sita2 <- -1/(2*sd^2)
+  return(c(sita1,sita2))
+}
+
+#datapointのリストからX_gridの確�?�?度関数を推定する関数
+library(TDA)
+seq1 <- seq(from=-10,to=10, by = 0.1)
+P_from_data <- function(datalist,x_grid,d=1,k=100){
+  if(d==1) Grid <- x_grid
+  if(d==6) Grid <- expand.grid(x_grid,x_grid,x_grid,x_grid,x_grid,x_grid)
+  knni <- sapply(datalist,knnDE,Grid=Grid, k=k)
+  return(knni)
+}
+
+#x_grid、P、距離行�?�を入れると�?数型�??�?族近似のF_dashと再構築した�??布p_estを返す関数
+IG_from_distmat <- function(x_grid,P,dist_mat,grid_num,k=2){
+  Sita <- t(cmdscale(as.dist(dist_mat),k=k))
+  Psi <- matrix(rep(apply(Sita^2,2,sum),grid_num),grid_num,ncol(P),byrow=T)
+  P_dash <- log(P) + Psi 
+  Sita_dash <- rbind(Sita,rep(1,ncol(Sita)))
+  F_dash <- P_dash %*% t(Sita_dash) %*% solve(Sita_dash %*% t(Sita_dash)) #F'を求め�?
+  p_est <- exp((F_dash %*% Sita_dash - Psi))
+  return(list(F_dash,p_est))
+}
+
+#mu_sd_canを�?�れると、それに対応するdatalist,x_grid,P_trueを返す
+input_make <- function(mu_sd_can,num=1000,grid_num=10000){
+  datalist <- list()
+  for(i in 1:length(mu_sd_can)){
+    mu <- mu_sd_can[[i]][1]
+    sd <- mu_sd_can[[i]][2]
+    datalist[[i]] <- as.matrix(rnorm(n=num,mu,sd))
+  }
+  x_grid <- seq(from=min(unlist(datalist)),to=max(unlist(datalist)), length=grid_num)
+  by = mean(diff(x_grid))
+  P_true <- sapply(mu_sd_can,function(x){dnorm(x_grid,x[1],x[2])})
+  result <- list(datalist,x_grid,P_true,by)
+  names(result) <- c("datalist","x_grid","P_true","by")
+  return(result)
+}
+
+#もとの�?�?と再生した�?�?のKL-divergenceを�?�現度の評価とする
+KLdiv2 <- function(vector1,vector2,unitvolume){
+  vector1[vector1==0] <- .Machine$double.xmin
+  vector2[vector2==0] <- .Machine$double.xmin
+  #return(sum(vector1*(log(vector1/vector2)))*unitvolume)
+  kldiv <- sum(vector1*log(vector1)-vector1*log(vector2))*unitvolume
+  return(kldiv)
+}
+
+KL_eval <- function(P1,P2,unitvolume){
+  result <- rep(NA,ncol(P1))
+  for(i in 1:ncol(P1)){
+    result[i] <- KLdiv2(P1[,i],P2[,i],unitvolume=unitvolume)
+  }
+  return(result)
+}
+
+#�?ろいろな�?ータポイント�?�リストを入れると、最終的なKLdivの�?�?数長さ�?�ベクトルを返す関数
+ker_simulation <- function(datalist,x_grid,P_true,k=2){
+  #�?�?数×�??�?数の�?積行�?��?ip_mat?��を得る
+  bunpunum <- length(datalist)
+  ip_mat <- matrix(NA,bunpunum,bunpunum)
+  for(i in 1:bunpunum){
+    for(j in i:bunpunum){
+      ip_mat[i,j] <- ip_from_point_Gau(datalist[[i]],datalist[[j]])
+      #cat(i,j,"\n")
+    }
+  }
+
+  #log<P,Q> = 2<sita1,sita2>
+  sita_ip_est_mat <- log(ip_mat)/2
+
+  #distmat_estに、カーネル方で求められる推定値から得られる、シータ座標系での距離行�?�を計�?
+  distmat_est <-  matrix(NA,bunpunum,bunpunum)
+  for(i in 1:bunpunum){
+    for(j in i:bunpunum){
+      distmat_est[i,j] <- sita_ip_est_mat[i,i] + sita_ip_est_mat[j,j] - 2*sita_ip_est_mat[i,j]
+      #cat(i,j,"\n")
+    }
+  }
+
+  #対角�?��??にも�?�れて距離行�?�化
+  for(i in 1:(nrow(distmat_est)-1)){
+    for(j in (i+1):ncol(distmat_est)){
+      distmat_est[j,i] <- distmat_est[i,j]
+    }
+  }
+  #write.csv(distmat_est,file="~/work/kekka/daykekka/2018.1/kernelMDS.Rmd.distmat_est.csv",quote=F,row.names=F)
+
+  #真�?�sitaの値と、MDS座標�?�相関行�??
+  #MDS座標を計�?
+  mds_eig <- cmdscale(as.dist(distmat_est),eig=T)$eig
+  mds <- cmdscale(as.dist(distmat_est),k=k)
+  
+  #P_knnを推定、計�?
+  P_knn <- P_from_data(datalist,x_grid=x_grid,k=300)
+
+  #�?数型�??�?族近似でF_dasj,P_estを計�?
+  res <- IG_from_distmat(x_grid=x_grid,P=P_knn,dist_mat=distmat_est,grid_num=length(x_grid))
+  F_dash <- res[[1]]
+  P_est <- res[[2]]
+  
+  #KLdivでパフォーマンスの箱ひげ図を描画,出�?
+  by <- mean(diff(x_grid))
+  performance <- KL_eval(P_true,P_est,unitvolume=by) #ここがおかし�?
+  
+  result <- list(distmat_est,mds_eig,mds,P_knn,P_est,F_dash,performance)
+  names(result) <- c("distmat_est","mds_eig","mds","P_knn","P_est","F_dash","performance")
+  return(result)
+
+}
+```
+
+```{r,eval=TRUE}
+#mu_sd_canを�?数作�??
+#ノ�?�マル、�??�?の数が多い、外れ値あり、θ?���?��?散が大きい、θ?���?��?散が大きい
+set.seed(1000)
+mu_sd_can1 <- list()
+bunpunum <- 10
+mu_can <- rnorm(bunpunum,0,4)
+sd_can <- sqrt(rinvgamma(bunpunum,shape=10,scale=5))
+for(i in 1:bunpunum){
+  mu_sd_can1[[i]] <- c(mu_can[i],sd_can[i])
+}
+
+mu_sd_can2 <- list()
+bunpunum <- 50
+mu_can <- rnorm(bunpunum,0,4)
+sd_can <- sqrt(rinvgamma(bunpunum,shape=10,scale=5))
+for(i in 1:bunpunum){
+  mu_sd_can2[[i]] <- c(mu_can[i],sd_can[i])
+}
+
+mu_sd_can3 <- list()
+bunpunum <- 10
+mu_can <- c(rnorm(bunpunum-2,0,4),rnorm(2,10,4))
+sd_can <- sqrt(rinvgamma(bunpunum,shape=10,scale=5))
+for(i in 1:bunpunum){
+  mu_sd_can3[[i]] <- c(mu_can[i],sd_can[i])
+}
+
+mu_sd_can4 <- list()
+bunpunum <- 10
+mu_can <- rnorm(bunpunum,0,4)
+sd_can <- sqrt(rinvgamma(bunpunum,shape=5,scale=10))
+for(i in 1:bunpunum){
+  mu_sd_can4[[i]] <- c(mu_can[i],sd_can[i])
+}
+
+mu_sd_can5 <- list()
+bunpunum <- 10
+mu_can <- rnorm(bunpunum,0,10)
+sd_can <- sqrt(rinvgamma(bunpunum,shape=10,scale=5))
+for(i in 1:bunpunum){
+  mu_sd_can5[[i]] <- c(mu_can[i],sd_can[i])
+}
+```
+
+
+```{r,eval=TRUE}
+#一連の実行�?, P_true,P_knn, P_estの描画
+set.seed(1000)
+result <- input_make(mu_sd_can1,num=1000)
+datalist1 <- result$datalist
+x_grid1 <- result$x_grid
+P_true1 <- result$P_true
+by1 <- result$by
+result <- ker_simulation(datalist1,x_grid1,P_true1,k=2)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+P_knn1 <- result$P_knn
+F_dash1 <- result$F_dash
+P_est1 <- result$P_est
+performance1 <- result$performance
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+matplot(x_grid1,P_true1,type="b",xlab="x",ylab="True distribution")
+matplot(x_grid1,P_knn1,type="b",xlab="x",ylab="knn estimated distribution")
+matplot(x_grid1,P_est1,type="b",xlab="x",ylab="Reprodeced distribution")
+
+#Save the result and plot
+write.csv(P_true1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_P_true.csv",quote = F,row.names=F)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_P_knn.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_F_dash.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_P_est.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_x_grid.csv",quote = F,row.names=F)
+write.csv(performance1,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_performance.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_P_true.png")
+matplot(x_grid1,P_true1,type="b",xlab="x",ylab="True distribution")
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_P_knn.png")
+matplot(x_grid1,P_knn1,type="b",xlab="x",ylab="knn estimated distribution")
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_P_est.png")
+matplot(x_grid1,P_est1,type="b",xlab="x",ylab="Reprodeced distribution")
+dev.off()
+```
+
+```{r,eval=TRUE}
+#�?ータ点の数を変えて実行し、performanceの折れ線グラフを描く
+set.seed(1000)
+num_can <- c(300,1000,2000,3000,8000)
+#num_can <- c(1000,2000)
+performance_mat <- NULL
+for(i in 1:length(num_can)){
+  result <- input_make(mu_sd_can1,num=num_can[i])
+  datalist1 <- result$datalist
+  x_grid1 <- result$x_grid
+  P_true1 <- result$P_true
+  result <- ker_simulation(datalist1,x_grid1,P_true1,k=2)
+  distmat_est1 <- result$distmat_est
+  mds_eig1 <- result$mds_eig
+  mds1 <- result$mds
+  P_knn1 <- result$P_knn
+  P_est1 <- result$P_est
+  performance1 <- result$performance
+  performance_mat <- rbind(performance_mat,performance1)
+}
+rownames(performance_mat) <- num_can
+write.csv(performance_mat,file="~/work/kekka/daykekka/2018.1/kernelMDS_norm_poiunnum_change_performance_mat.csv",quote=F)
+matplot(num_can,abs(performance_mat),type="b",xlab="The number of datapoints",ylab="performance index",xaxt="n")
+axis(side=1, at=num_can)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_poiunnum_change.png")
+matplot(num_can,performance_mat,type="b",xlab="The number of datapoints",ylab="performance index",xaxt="n")
+axis(side=1, at=num_can)
+dev.off()
+```
+
+
+```{r, eval=TRUE}
+#異なる�??�?セ�?ト�?mu_sd_can1~5)で実施し、パフォーマンスの箱ひげ図を描�?
+set.seed(1000)
+bunpuset_list <- list(mu_sd_can1,mu_sd_can2,mu_sd_can3,mu_sd_can4,mu_sd_can5)
+performance_mat <- NULL
+performance_list <- list()
+for(i in 1:length(bunpuset_list)){
+  mu_sd_can <- bunpuset_list[[i]]
+  result <- input_make(mu_sd_can,num=2000)
+  datalist1 <- result$datalist
+  x_grid1 <- result$x_grid
+  P_true1 <- result$P_true
+  result <- ker_simulation(datalist1,x_grid1,P_true1,k=2)
+  distmat_est1 <- result$distmat_est
+  mds_eig1 <- result$mds_eig
+  mds1 <- result$mds
+  P_knn1 <- result$P_knn
+  P_est1 <- result$P_est
+  performance1 <- result$performance
+  #performance_mat <- cbind(performance_mat,performance1)
+  performance_list[[i]] <- performance1
+}
+names(performance_list) <- c("A","B","C","D","E")
+boxplot(sapply(performance_list,abs))
+
+#Save result
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_parachange.png")
+boxplot(sapply(performance_list,abs),xlab="Condition",ylab="Performance Index")
+dev.off()
+```
+
+```{r, eval=TRUE}
+#1次�?混合正規�??�?の確�?�?度を発生させる関数
+make_mix_dis <- function(x,r_vec,mean_vec,sd_vec){
+  p <- rep(0,length(x))
+  for(i in 1:length(r_vec)){
+    p <- p + r_vec[i] * dnorm(x, mean=mean_vec[i], sd=sd_vec[i])
+  }
+  return(p)
+}
+
+
+#1次�?混合正規�??�?からの乱数を発生させる関数
+mix_data_generate <- function(n,r_vec,mean_vec,sd_vec){
+  result <- rep(NA,n)
+  d <- rmultinom(n=1, size = n, prob = r_vec) 
+  num <- length(r_vec)
+  idx <- 1
+  for(i in 1:num){
+    n_num <- d[i,1]
+    result[idx:(idx+n_num-1)] <- rnorm(n_num,mean_vec[i],sd_vec[i])
+    idx <- idx + n_num
+  }
+  return(result)
+}
+
+#?��次�?混合正規�??�?のmu_sd_canを�?�れると、それに対応するdatalist,x_grid,P_trueを返す
+input_make2 <- function(para_can,num=5000,grid_num=10000){
+  datalist <- list()
+  for(i in 1:length(para_can)){
+    mu_vec <- para_can[[i]][1,]
+    sd_vec <- para_can[[i]][2,]
+    r_vec <- para_can[[i]][3,]
+    datalist[[i]] <- as.matrix(mix_data_generate(num,r_vec,mu_vec,sd_vec))
+  }
+  x_grid <- seq(from=min(unlist(datalist)),to=max(unlist(datalist)), length=grid_num)
+  by = mean(diff(x_grid))
+  P_true <- sapply(para_can,function(x){make_mix_dis(x=x_grid,r_vec=x[3,],mean_vec=x[1,],sd_vec=x[2,])})
+  result <- list(datalist,x_grid,P_true,by)
+  names(result) <- c("datalist","x_grid","P_true","by")
+  return(result)
+}
+```
+
+```{r, eval=TRUE}
+#1次�?混合正規�??�?の�?�?セ�?トをpara_canに格�?(mu_sd_canに相�?)
+library(MCMCpack)
+set.seed(1000)
+bunpunum <- 30
+kouseibunpu_num <- 2
+para_can <- list()
+for(i in 1:bunpunum){
+  para_mat <- matrix(NA,3,kouseibunpu_num)
+  rownames(para_mat) <- c("mu","sd","ratio")
+  para_mat[1,] <- c(rnorm(1,0,0.5),rnorm(1,4,0.5))
+  para_mat[2,] <- sqrt(rinvgamma(kouseibunpu_num,shape=10,scale=5))
+  para_mat[3,] <- rdirichlet(1,rep(1,kouseibunpu_num))
+  para_can[[i]] <- para_mat
+}
+
+#Save Result
+para_save <- t(sapply(para_can,function(tmp){tmp}))
+colnames(para_save) <- c("mu_1","sd_1","ratio_1","mu_2","sd_2","ratio_2")
+write.csv(para_save,"~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_para_save.csv",quote=F)
+para_save 
+```
+
+```{r, eval=TRUE}
+#一連の解析を実施
+set.seed(1000)
+result <- input_make2(para_can,num=5000)
+datalist1 <- result$datalist
+x_grid1 <- result$x_grid
+P_true1 <- result$P_true
+by1 <- result$by
+result <- ker_simulation(datalist1,x_grid1,P_true1,k=2)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+performance1 <- result$performance
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+matplot(x_grid1,P_true1,type="b",xlab="x",ylab="True distribution")
+matplot(x_grid1,P_knn1,type="b",xlab="x",ylab="knn estimated distribution")
+matplot(x_grid1,P_est1,type="b",xlab="x",ylab="Reprodeced distribution")
+
+#Save the result and plot
+write.csv(P_true1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_P_true.csv",quote = F,row.names=F)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_distmat_est1.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_F_dash.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_P_est.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_x_grid.csv",quote = F,row.names=F)
+write.csv(performance1,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_performance.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_P_true.png")
+matplot(x_grid1,P_true1,type="b",xlab="x",ylab="True distribution")
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_P_knn.png")
+matplot(x_grid1,P_knn1,type="b",xlab="x",ylab="knn estimated distribution")
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_P_est.png")
+matplot(x_grid1,P_est1,type="b",xlab="x",ylab="Reprodeced distribution")
+dev.off()
+```
+
+```{r, eval=TRUE}
+#MDS1 capture the mixture ratio
+distmat <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_distmat_est1.csv",header=T)
+mds <- cmdscale(as.dist(distmat))
+para <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_para_save.csv",header=T,row.names=1)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_MDS_para.png")
+plot(mds[,1],para[,3],xlab="MDS1",ylab="ratio",cex.lab=1.5)
+dev.off()
+cor.test(mds[,1],para[,3],method="spearman")
+
+#F_dash has information of MDS coordinate
+x_grid1 <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_x_grid.csv",header=T)
+F_dash1 <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_F_dash.csv",header=T)
+
+#F_dash has information of MDS coordinate
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_F.png")
+matplot(x_grid1[,1],F_dash1,xlab="x",ylab="F1 and C value",type="b")
+dev.off()
+
+#near 0 or 4 ?
+cat(x_grid1[order(abs(F_dash1[,2]),decreasing=T)[1:10],1],"\n")
+```
+
+```{r, eval=TRUE}
+#�?ータ点の数を変えて実行し、performanceの折れ線グラフを描く
+set.seed(1000)
+num_can <- c(1000,2000,3000,4000,5000)
+#num_can <- c(1000,2000)
+performance_mat <- NULL
+for(i in 1:length(num_can)){
+  result <- input_make2(para_can,num=num_can[i])
+  datalist1 <- result$datalist
+  x_grid1 <- result$x_grid
+  P_true1 <- result$P_true
+  result <- ker_simulation(datalist1,x_grid1,P_true1,k=2)
+  distmat_est1 <- result$distmat_est
+  mds_eig1 <- result$mds_eig
+  mds1 <- result$mds
+  P_knn1 <- result$P_knn
+  P_est1 <- result$P_est
+  performance1 <- result$performance
+  performance_mat <- rbind(performance_mat,performance1)
+}
+rownames(performance_mat) <- num_can
+matplot(num_can,performance_mat,type="b",xlab="The number of datapoints",ylab="performance index",xaxt="n")
+axis(side=1, at=num_can)
+
+#Save results
+rownames(performance_mat) <- num_can
+write.csv(performance_mat,file="~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_poiunnum_change_performance_mat.csv",quote=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_poiunnum_change.png")
+matplot(num_can,abs(performance_mat),type="b",xlab="The number of datapoints",ylab="performance index",xaxt="n")
+axis(side=1, at=num_can)
+dev.off()
+```
+```{r, eval=TRUE}
+
+```
+
+
+Figure4 : 6 dimensional mixture normal distribution
+```{r, eval=TRUE}
+#n次�?混合正規�??�?の確�?�?度を発生させる関数
+library(mvtnorm)
+make_mix_dis2 <- function(x_grid,r_vec,mean_mat_list,cov_mat_list){
+  p <- rep(0,nrow(x_grid))
+  for(i in 1:length(r_vec)){
+    p <- p + r_vec[i] * dmvnorm(x_grid, mean=mean_mat_list[[i]], sigma=cov_mat_list[[i]])
+  }
+  return(p)
+}
+
+#n次�?混合正規�??�?に従う乱数を発生させる
+mix_data_generate2 <- function(point_num,d,r_vec,mean_mat_list,cov_mat_list){
+  result <- matrix(NA,point_num,d)
+  tmp <- rmultinom(n=1, size = point_num, prob = r_vec) 
+  num <- length(r_vec)
+  idx <- 1
+  for(i in 1:num){
+    n_num <- tmp[i,1]
+    result[idx:(idx+n_num-1),] <- rmvnorm(n_num,mean_mat_list[[i]],cov_mat_list[[i]])
+    idx <- idx + n_num
+  }
+  return(result)
+}
+
+#n次�?正規�??�?をいくつか混合してできたのがFACS�?ータと�?える
+#混合割合がサンプルごとに異な�?
+set.seed(1000)
+kouseibunpu_num <- 3
+d <- 6
+mean_mat_list <- list()
+cov_mat_list <- list()
+for(i in 1:kouseibunpu_num){
+  mean_mat_list[[i]] <- rnorm(d,0,1)
+  sd_marker <- sqrt(rinvgamma(d,shape=10,scale=5))
+  rho_mat <- diag(d)
+  cov_mat <- matrix(NA,d,d)
+  for(marker1 in 1:d){
+    for(marker2 in 1:d){
+      cov_mat[marker1,marker2] <- sd_marker[marker1] * sd_marker[marker2] * rho_mat[marker1,marker2]
+    }
+  }
+  cov_mat_list[[i]] <- cov_mat
+}
+ 
+#�?�?�?ごとに構�?�割合�?�みを変え�?
+#MDSによって、データ点のみを用�?てこ�?�異同が捉えられるかを見る
+bunpunum <- 10
+para6d_can <- list() #�?�?数長さ�?�構�?��??�?の混合割合�?�リス�?
+for(i in 1:bunpunum){
+  ratio <- runif(kouseibunpu_num)
+  ratio[2] <- ratio[1]
+  ratio <- ratio/sum(ratio)
+  ratio <- rdirichlet(1,rep(1,kouseibunpu_num))
+  para6d_can[[i]] <- ratio
+}
+
+#Save the result and plot
+para6d_save <- matrix(NA,bunpunum,kouseibunpu_num)
+colnames(para6d_save) <- paste0("ratio",1:kouseibunpu_num)
+for(i in 1:bunpunum){
+  para6d_save [i,] <- para6d_can[[i]]
+}
+write.csv(para6d_save,"~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_para_save.csv",quote=F)
+para6d_save
+
+#Save the mean vector and covariance matrix
+mean_vec_save <- sapply(mean_mat_list,function(x){x})
+write.csv(mean_vec_save,"~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_meanvec.csv",quote=F)
+for(i in 1:length(cov_mat_list)){
+  write.csv(cov_mat_list[[i]],file=paste0("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_cov",i,".csv"),quote=F,row.names=F)
+}
+
+#6次�?混合正規�??�?の,構�?��??�?のmean_mat_list, cov_mat_list,�?�?�?のそれら�?�色�?な混合比para6d_canを�?�れると、、それに対応するdatalist,x_grid,P_trueを返す
+input_make2 <- function(ratio_can,mean_mat_list,cov_mat_list,point_num=20000,grid_by=10,d=6){
+  datalist <- list()
+  for(i in 1:length(ratio_can)){
+    r_vec <- ratio_can[[i]]
+    datalist[[i]] <- as.matrix(mix_data_generate2(point_num,d,r_vec,mean_mat_list,cov_mat_list))
+    #cat(i,"\n")
+  }
+　seq_list <- list()
+  by_vec <- rep(NA,d)
+  for(i in 1:d){
+    tmp <- sapply(datalist,function(data){c(max(data[,i]),min(data[,i]))})
+    seq_list[[i]] <- seq(from=min(tmp),to=max(tmp), length=grid_by)
+    by_vec[i] = mean(diff(seq_list[[i]]))
+    #cat(i,"\n")
+  }
+  x_grid <- expand.grid(seq_list[[1]],seq_list[[2]],seq_list[[3]],seq_list[[4]],seq_list[[5]],seq_list[[6]])
+  P_true <- sapply(ratio_can,function(r_vec){make_mix_dis2(x=x_grid,r_vec=r_vec,mean_mat_list,cov_mat_list)})
+  result <- list(datalist,x_grid,P_true,by_vec,seq_list)
+  names(result) <- c("datalist","x_grid","P_true","by_vec","seq_list")
+  return(result)
+}
+
+#ker?simulation関数を６次�?に拡張
+ker_simulation_nd <- function(datalist,x_grid,P_true,by_vec,k=2){
+  #�?�?数×�??�?数の�?積行�?��?ip_mat?��を得る
+  bunpunum <- length(datalist)
+  ip_mat <- matrix(NA,bunpunum,bunpunum)
+  for(i in 1:bunpunum){
+    for(j in i:bunpunum){
+      ip_mat[i,j] <- ip_from_point_Gau(datalist[[i]],datalist[[j]])
+      #cat(i,j,"\n")
+    }
+  }
+
+  #log<P,Q> = 2<sita1,sita2>
+  sita_ip_est_mat <- log(ip_mat)/2
+
+  #distmat_estに、カーネル方で求められる推定値から得られる、シータ座標系での距離行�?�を計�?
+  distmat_est <-  matrix(NA,bunpunum,bunpunum)
+  for(i in 1:bunpunum){
+    for(j in i:bunpunum){
+      distmat_est[i,j] <- sita_ip_est_mat[i,i] + sita_ip_est_mat[j,j] - 2*sita_ip_est_mat[i,j]
+      #cat(i,j,"\n")
+    }
+  }
+
+  #対角�?��??にも�?�れて距離行�?�化
+  for(i in 1:(nrow(distmat_est)-1)){
+    for(j in (i+1):ncol(distmat_est)){
+      distmat_est[j,i] <- distmat_est[i,j]
+    }
+  }
+  #cat("DIST_MAKE","\n")
+  #write.csv(distmat_est,file="~/work/kekka/daykekka/2018.1/kernelMDS.Rmd.distmat_est.csv",quote=F,row.names=F)
+
+  #真�?�sitaの値と、MDS座標�?�相関行�??
+  #MDS座標を計�?
+  mds_eig <- cmdscale(as.dist(distmat_est),eig=T)$eig
+  mds <- cmdscale(as.dist(distmat_est),k=k)
+  
+  #P_knnを推定、計�?
+  P_knn <- P_from_data(datalist,x_grid=x_grid,k=300)
+  #cat("Knn_Finifhed","\n")
+
+  #�?数型�??�?族近似でF_dasj,P_estを計�?
+  grid_num <- nrow(as.matrix(x_grid))
+  res <- IG_from_distmat(x_grid=x_grid,P=P_knn,dist_mat=distmat_est,grid_num=grid_num,k=2)
+  F_dash <- res[[1]]
+  P_est <- res[[2]]
+  #cat("P_est Finished","\n")
+
+  #KLdivでパフォーマンスの箱ひげ図を描画,出�?
+  performance <- KL_eval(P_true,P_est,unitvolume=prod(by_vec))
+  #cat("Evaluate Performance Finished","\n")
+
+  result <- list(distmat_est,mds_eig,mds,P_knn,P_est,F_dash,performance)
+  names(result) <- c("distmat_est","mds_eig","mds","P_knn","P_est","F_dash","performance")
+　return(result)
+
+}
+```
+
+```{r, eval=TRUE}
+#一連の解析を実施
+result <- input_make2(para6d_can,mean_mat_list,cov_mat_list,point_num=1000,grid_by=10,d=6)
+datalist1 <- result$datalist
+x_grid1 <- result$x_grid
+P_true1 <- result$P_true
+by_vec1 <- result$by
+result <- ker_simulation_nd(datalist1,x_grid1,P_true1,by_vec1,k=2)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+performance1 <- result$performance
+
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+
+
+write.csv(P_true1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_P_true.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_F_dash.csv",quote = F,row.names=F)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_P_est.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_x_grid.csv",quote = F,row.names=F)
+write.csv(performance1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_performance.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+```
+
+```{r, eval=TRUE}
+#MDS1 capture the mixture ratio
+distmat <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_distmat_est1.csv",header=T)
+mds <- cmdscale(as.dist(distmat))
+para <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_para_save.csv",header=T,row.names=1)
+tmp <- cbind(mds[,1],para)
+colnames(tmp) <- c("MDS1","ratio1","ratio2","ratio3")
+png("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_coplot")
+plot(tmp)
+dev.off()
+
+#near 0 or 4 ?
+x_grid1[order(abs(F_dash1[,2]),decreasing = T)[1:10],]
+```
+
+
+
+```{r, eval=TRUE}
+#一連の解析をFACS実データにたいして適用する関数
+ker_facs <- function(datalist,k=2,grid_by=10){
+  #�?�?数×�??�?数の�?積行�?��?ip_mat?��を得る
+  bunpunum <- length(datalist)
+  ip_mat <- matrix(NA,bunpunum,bunpunum)
+  for(i in 1:bunpunum){
+    for(j in i:bunpunum){
+      ip_mat[i,j] <- ip_from_point_Gau(datalist[[i]],datalist[[j]])
+      cat(i,j,"\n")
+    }
+  }
+
+  #log<P,Q> = 2<sita1,sita2>
+  sita_ip_est_mat <- log(ip_mat)/2
+
+  #distmat_estに、カーネル方で求められる推定値から得られる、シータ座標系での距離行�?�を計�?
+  distmat_est <-  matrix(NA,bunpunum,bunpunum)
+  for(i in 1:bunpunum){
+    for(j in i:bunpunum){
+      distmat_est[i,j] <-  sita_ip_est_mat[i,i] + sita_ip_est_mat[j,j] - 2*sita_ip_est_mat[i,j]
+      cat(i,j,"\n")
+    }
+  }
+
+  #対角�?��??にも�?�れて距離行�?�化
+  for(i in 1:(nrow(distmat_est)-1)){
+    for(j in (i+1):ncol(distmat_est)){
+      distmat_est[j,i] <- distmat_est[i,j]
+    }
+  }
+  cat("DIST_MAKE","\n")
+  #write.csv(distmat_est,file="~/work/kekka/daykekka/2018.1/kernelMDS.Rmd.distmat_est.csv",quote=F,row.names=F)
+
+  #真�?�sitaの値と、MDS座標�?�相関行�??
+  #MDS座標を計�?
+  mds_eig <- cmdscale(as.dist(distmat_est),eig=T)$eig
+  mds <- cmdscale(as.dist(distmat_est))
+  
+  #Gridを確�?
+  seq_list <- list()
+  d <- 6
+  by_vec <- rep(NA,d)
+  for(i in 1:d){
+    tmp <- sapply(datalist,function(data){c(max(data[,i]),min(data[,i]))})
+    seq_list[[i]] <- seq(from=min(tmp),to=max(tmp), length=grid_by)
+    by_vec[i] = mean(diff(seq_list[[i]]))
+    #cat(i,"\n")
+  }
+  x_grid <- expand.grid(seq_list[[1]],seq_list[[2]],seq_list[[3]],seq_list[[4]],seq_list[[5]],seq_list[[6]])
+  
+  #P_knnを推定、計�?
+  P_knn <- P_from_data(datalist,x_grid=x_grid,k=300)
+  cat("Knn_Finifhed","\n")
+
+  #�?数型�??�?族近似でF_dash,P_estを計�?
+  grid_num <- nrow(as.matrix(x_grid))
+  res <- IG_from_distmat(x_grid=x_grid,P=P_knn,dist_mat=distmat_est,grid_num=grid_num,k=2)
+  F_dash <- res[[1]]
+  P_est <- res[[2]]
+  cat("P_est Finished","\n")
+
+  result <- list(distmat_est,mds_eig,mds,x_grid,P_knn,P_est,F_dash)
+  names(result) <- c("distmat_est","mds_eig","mds","x_grid","P_knn","P_est","F_dash")
+　　return(result)
+}
+
+path <- "/home/okada/work/fcs_normalized"
+files <- sort(list.files(path))
+personID <- sapply(strsplit(files,"\\."),function(x){substr(x[1],10,15)})
+use_personID <- sort(unique(personID))[1:10]
+use_dayID <- c("day0","day7")
+use_files <- NULL
+use_files_day <- NULL
+use_files_person <- NULL
+for(person in use_personID){
+  for(day in use_dayID){
+    filename <- paste0("nomalized",person,".",day,".B.fcs")
+    if(filename %in% files){
+      use_files <- c(use_files,filename)
+      use_files_day <- c(use_files_day,day)
+      use_files_person <- c(use_files_person,person)
+    }
+  }
+}
+
+#dayなどの�?損がな�?かを確�?
+length(use_personID)*length(use_dayID)==length(use_files)
+
+#datalistにFACS�?ータを�?��?
+library(flowCore)
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+facs_datalist <- list()
+for(i in 1:length(use_files)){
+  file1 <- paste0(path,"/",use_files[i])
+  fcs <- read.FCS(file1,transformation=FALSE)
+  facs_datalist[[i]] <- fcs@exprs[,markers]
+}
+
+#計�?
+result <- ker_facs(facs_datalist)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+x_grid1 <- result$x_grid
+colnames(x_grid1) <- markers
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+
+#Save the result and plot
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_real_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_real_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_real_P_est.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_real_F_dash.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_real_x_grid.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_real_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_real_MDS.png")
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),10),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,10,1),each=2)))
+dev.off()
+```
+```{r, eval=TRUE}
+library(maptools)
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),10),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,10,1),each=2)))
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+```
+
+```{r, eval=TRUE}
+#F means what ?
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+markers_pro <- c("CD21","CD138","IgM","CD19","IgD","CD27")
+colnames(x_grid1) <- markers_pro
+focus_grid_num <- 500
+top_grid1 <- x_grid1[order(F_dash1[,2],decreasing = T)[1:focus_grid_num],]
+bot_grid1 <- x_grid1[order(F_dash1[,2])[1:focus_grid_num],]
+top_grid2 <- x_grid1[order(F_dash1[,3],decreasing = T)[1:focus_grid_num],]
+bot_grid2 <- x_grid1[order(F_dash1[,3])[1:focus_grid_num],]
+
+
+#�??��xでの上位グリ�?ドがどの細胞�?�に対応する�?�かを判定する関数
+B_grid_check <- function(grid, cutoff){
+  CD21 <- grid["CD21"]>cutoff["CD21"]
+  CD138 <- grid["CD138"]>cutoff["CD138"]
+  IgM <- grid["IgM"]>cutoff["IgM"]
+  CD19 <- grid["CD19"]>cutoff["CD19"]
+  IgD <- grid["IgD"]>cutoff["IgD"]
+  CD27 <- grid["CD27"]>cutoff["CD27"]
+  pn_vec <- c(CD21,CD138,IgM,CD19,IgD,CD27)
+  if(all(c(CD19,IgM,CD21,CD27,CD138)==c(0,0,0,1,1))) return("plasma cell")
+  else if(all(c(CD19,IgM,CD21)==c(1,1,0))) return("Immature")
+  else if(all(c(CD19,IgM,CD21,IgD,CD27)==c(1,1,1,1,0))) return("Naive")
+  else if(all(c(CD19,IgM,CD21,IgD,CD27)==c(1,1,1,1,1))) return("Non-switched_Memory")
+  else if(all(c(CD19,IgM,CD21,IgD,CD27)==c(1,0,1,0,1))) return("Class-switched_Memory")
+  else if(all(c(CD19,IgM,CD21,IgD,CD27)==c(1,0,1,0,0))) return("Double-negative_Memory")
+  else return("No_Hit")
+}
+
+#カ�?トオフ値はdayscript1026_3.Rで計算したカ�?トオフ値のヒストグラ�?にあてはめた正規�??�?の平�?値を採用
+kc <- read.csv("~/work/kekka/daykekka/2016.10/kcb1026.3.csv",header=T,row.names=1)
+library(MASS)
+source("~/work/function.R")
+param.mat <- t(apply(kc,2,function(x){cutoff.norm.des(x)$param}))  #当てはめた正規�??�?の平�?と標準偏差を�?��?
+cf_b <- param.mat[c("FITC.A","PE.A","PerCP.Cy5.5.A","PE.Cy7.A","APC.A","Pacific.Blue.A"),"mean"]
+names(cf_b) <- c("CD21","CD138","IgM","CD19","IgD","CD27")
+cat(cf_b,"\n")
+
+hist(F_dash1[,2],xlab="F1",main="")
+hist(F_dash1[,3],xlab="F2",main="")
+F1_top <- apply(top_grid1,1,B_grid_check,cf_b)
+F1_bot <- apply(bot_grid1,1,B_grid_check,cf_b)
+F2_top<- apply(top_grid2,1,B_grid_check,cf_b)
+F2_bot <- apply(bot_grid2,1,B_grid_check,cf_b)
+
+cell_type <- c("plasma cell","Immature","Naive","Non-switched_Memory","Class-switched_Memory","Double-negative_Memory","No_Hit")
+result <- matrix(0,4,length(cell_type))
+colnames(result) <- cell_type
+rownames(result) <- c("F1_top","F1_bottom","F2_top","F2_bottom")
+tmplist <- list(F1_top,F1_bot,F2_top,F2_bot)
+for(i in 1:length(tmplist)){
+  tmp <- tmplist[[i]]
+  for(j in 1:length(cell_type)){
+    result[i,j] <- sum(tmp==cell_type[j])
+  }
+}
+result
+write.csv(result,file="~/work/kekka/daykekka/2018.1/kernelMDS_real_table.csv",quote=F)
+```
+
+```{r, eval=TRUE}
+#Real Dataの解析において、タイターの変化が上�?7人と、下�?7人の場合で実施
+pheno <- read.csv("/home/okada/work/kekka/daykekka/2016.7/Shiga_SRL_QA20120608_pheno.csv",header=T,row.names=1,stringsAsFactors=F)
+def <- read.csv("/home/okada/work/kekka/daykekka/2016.7/Shiga_SRL_QA20120608_def.csv",header=T,row.names=1,stringsAsFactors=F)
+H1N1 <- rownames(def[def[,"name"] =="Aガタ(H1N1)",])
+titer <- pheno[,H1N1]
+titer_tmp <- titer
+titer_tmp[titer_tmp=="<10"] <- 10
+titer_tmp <- sapply(titer_tmp,as.numeric)
+titer07_ratio <- titer_tmp[,3]/titer_tmp[,1]
+names(titer07_ratio) <- 1:301
+titer07_ratio <- titer07_ratio[!is.na(titer07_ratio)]
+cat(sort(titer07_ratio,decreasing=T)[1:40],"\n")
+cat(sort(titer07_ratio,decreasing=F)[1:40],"\n")
+hendou_person <- names(sort(titer07_ratio,decreasing=T)[1:7])
+nonhendou_person <- names(sort(titer07_ratio,decreasing=F)[28:34])
+
+#よく変動する?��サンプルでdatalistを作る
+path <- "/home/okada/work/fcs_normalized"
+files <- sort(list.files(path))
+personID <- sapply(strsplit(files,"\\."),function(x){substr(x[1],10,15)})
+unq_personID <- sort(unique(personID))
+names(unq_personID) <- 1:length(unq_personID)
+use_personID <- unq_personID[hendou_person]
+use_dayID <- c("day0","day7")
+use_files <- NULL
+use_files_day <- NULL
+use_files_person <- NULL
+for(person in use_personID){
+  for(day in use_dayID){
+    filename <- paste0("nomalized",person,".",day,".B.fcs")
+    if(filename %in% files){
+      use_files <- c(use_files,filename)
+      use_files_day <- c(use_files_day,day)
+      use_files_person <- c(use_files_person,person)
+    }
+  }
+}
+
+#datalistにFACS�?ータを�?��?
+library(flowCore)
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+facs_datalist <- list()
+for(i in 1:length(use_files)){
+  file1 <- paste0(path,"/",use_files[i])
+  fcs <- read.FCS(file1,transformation=FALSE)
+  facs_datalist[[i]] <- fcs@exprs[,markers]
+}
+
+#計�?
+result <- ker_facs(facs_datalist)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+x_grid1 <- result$x_grid
+colnames(x_grid1) <- markers
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+
+#Save the result and plot
+library(maptools)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_P_est.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_F_dash.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_x_grid.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realtop7_MDS.png")
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),17),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,7,1),each=2)))
+dev.off()
+```
+
+#よく変動する?��サンプルでdatalistを作る
+path <- "/home/okada/work/fcs_normalized"
+files <- sort(list.files(path))
+personID <- sapply(strsplit(files,"\\."),function(x){substr(x[1],10,15)})
+unq_personID <- sort(unique(personID))
+names(unq_personID) <- 1:length(unq_personID)
+use_personID <- unq_personID[hendou_person]
+use_dayID <- c("day0","day7")
+use_files <- NULL
+use_files_day <- NULL
+use_files_person <- NULL
+for(person in use_personID){
+  for(day in use_dayID){
+    filename <- paste0("nomalized",person,".",day,".B.fcs")
+    if(filename %in% files){
+      use_files <- c(use_files,filename)
+      use_files_day <- c(use_files_day,day)
+      use_files_person <- c(use_files_person,person)
+    }
+  }
+}
+
+#datalistにFACS�?ータを�?��?
+library(flowCore)
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+facs_datalist <- list()
+for(i in 1:length(use_files)){
+  file1 <- paste0(path,"/",use_files[i])
+  fcs <- read.FCS(file1,transformation=FALSE)
+  facs_datalist[[i]] <- fcs@exprs[,markers]
+}
+
+#計�?
+result <- ker_facs(facs_datalist)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+x_grid1 <- result$x_grid
+colnames(x_grid1) <- markers
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+
+#Save the result and plot
+library(maptools)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_P_est.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_F_dash.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_x_grid.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realnon7_MDS.png")
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),17),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,7,1),each=2)))
+dev.off()
+
+hist(F_dash1[,2],xlab="F1",main="")
+hist(F_dash1[,3],xlab="F2",main="")
+F1_top <- apply(top_grid1,1,B_grid_check,cf_b)
+F1_bot <- apply(bot_grid1,1,B_grid_check,cf_b)
+F2_top<- apply(top_grid2,1,B_grid_check,cf_b)
+F2_bot <- apply(bot_grid2,1,B_grid_check,cf_b)
+
+con <- 1
+t.test(mds1[seq(1,13,by=2),con],mds1[seq(2,14,by=2),con],paired=T)
+
+```{r, eval=TRUE}
+#Real Dataの解析において、タイターの変化が上位１０人と+下位１０人の場合で実施
+pheno <- read.csv("/home/okada/work/kekka/daykekka/2016.7/Shiga_SRL_QA20120608_pheno.csv",header=T,row.names=1,stringsAsFactors=F)
+def <- read.csv("/home/okada/work/kekka/daykekka/2016.7/Shiga_SRL_QA20120608_def.csv",header=T,row.names=1,stringsAsFactors=F)
+H1N1 <- rownames(def[def[,"name"] =="Aガタ(H1N1)",])
+titer <- pheno[,H1N1]
+titer_tmp <- titer
+titer_tmp[titer_tmp=="<10"] <- 10
+titer_tmp <- sapply(titer_tmp,as.numeric)
+titer07_ratio <- titer_tmp[,3]/titer_tmp[,1]
+names(titer07_ratio) <- 1:301
+titer07_ratio <- titer07_ratio[!is.na(titer07_ratio)]
+cat(sort(titer07_ratio,decreasing=T)[1:40],"\n")
+cat(sort(titer07_ratio,decreasing=F)[1:40],"\n")
+kyokutan_person <- c(names(sort(titer07_ratio,decreasing=T)[1:7]),names(sort(titer07_ratio,decreasing=F)[28:34]))
+
+path <- "/home/okada/work/fcs_normalized"
+files <- sort(list.files(path))
+personID <- sapply(strsplit(files,"\\."),function(x){substr(x[1],10,15)})
+unq_personID <- sort(unique(personID))
+names(unq_personID) <- 1:length(unq_personID)
+use_personID <- unq_personID[kyokutan_person]
+use_dayID <- c("day0","day7")
+use_files <- NULL
+use_files_day <- NULL
+use_files_person <- NULL
+for(person in use_personID){
+  for(day in use_dayID){
+    filename <- paste0("nomalized",person,".",day,".B.fcs")
+    if(filename %in% files){
+      use_files <- c(use_files,filename)
+      use_files_day <- c(use_files_day,day)
+      use_files_person <- c(use_files_person,person)
+    }
+  }
+}
+
+#datalistにFACS�?ータを�?��?
+library(flowCore)
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+facs_datalist <- list()
+for(i in 1:length(use_files)){
+  file1 <- paste0(path,"/",use_files[i])
+  fcs <- read.FCS(file1,transformation=FALSE)
+  facs_datalist[[i]] <- fcs@exprs[,markers]
+}
+
+#計�?
+result <- ker_facs(facs_datalist)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+x_grid1 <- result$x_grid
+colnames(x_grid1) <- markers
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+
+#Save the result and plot
+library(maptools)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_P_est.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_F_dash.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_x_grid.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku_MDS.png")
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),14),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,14,1),each=2)))
+dev.off()
+```
+
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+markers_pro <- c("CD21","CD138","IgM","CD19","IgD","CD27")
+colnames(x_grid1) <- markers_pro
+focus_grid_num <- 500
+top_grid1 <- x_grid1[order(F_dash1[,2],decreasing = T)[1:focus_grid_num],]
+bot_grid1 <- x_grid1[order(F_dash1[,2])[1:focus_grid_num],]
+top_grid2 <- x_grid1[order(F_dash1[,3],decreasing = T)[1:focus_grid_num],]
+bot_grid2 <- x_grid1[order(F_dash1[,3])[1:focus_grid_num],]
+F1_top <- apply(top_grid1,1,B_grid_check,cf_b)
+F1_bot <- apply(bot_grid1,1,B_grid_check,cf_b)
+F2_top<- apply(top_grid2,1,B_grid_check,cf_b)
+F2_bot <- apply(bot_grid2,1,B_grid_check,cf_b)
+
+```{r, eval=TRUE}
+titer0 = as.numeric(titer[,1])
+titer7 = as.numeric(titer[,3])
+titer07 <- titer7/titer0
+names(titer07) <- 1:301
+kyokutan_person2 <- c(names(sort(titer07,decreasing=T))[1:10],names(titer07[which(titer07==1)])[1:10])
+
+path <- "/home/okada/work/fcs_normalized"
+files <- sort(list.files(path))
+personID <- sapply(strsplit(files,"\\."),function(x){substr(x[1],10,15)})
+unq_personID <- sort(unique(personID))
+names(unq_personID) <- 1:length(unq_personID)
+use_personID <- unq_personID[kyokutan_person2]
+use_dayID <- c("day0","day7")
+use_files <- NULL
+use_files_day <- NULL
+use_files_person <- NULL
+for(person in use_personID){
+  for(day in use_dayID){
+    filename <- paste0("nomalized",person,".",day,".B.fcs")
+    if(filename %in% files){
+      use_files <- c(use_files,filename)
+      use_files_day <- c(use_files_day,day)
+      use_files_person <- c(use_files_person,person)
+    }
+  }
+}
+
+#datalistにFACS�?ータを�?��?
+library(flowCore)
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+facs_datalist <- list()
+for(i in 1:length(use_files)){
+  file1 <- paste0(path,"/",use_files[i])
+  fcs <- read.FCS(file1,transformation=FALSE)
+  facs_datalist[[i]] <- fcs@exprs[,markers]
+}
+
+#計�?
+result <- ker_facs(facs_datalist)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+x_grid1 <- result$x_grid
+colnames(x_grid1) <- markers
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+
+#Save the result and plot
+library(maptools)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_P_est.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_F_dash.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_x_grid.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_realkyoku2_MDS.png")
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),20),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,20,1),each=2)))
+dev.off()
+```
+
+```{r, eval=TRUE}
+#Titer 4 fold, 10 samples
+set.seed(1000)
+titer0 = as.numeric(titer[,1])
+titer7 = as.numeric(titer[,3])
+titer07 <- titer7/titer0
+names(titer07) <- 1:301
+tmp <- names(titer07[which(titer07==4)])
+fold4_person <- sample(tmp,10)
+
+path <- "/home/okada/work/fcs_normalized"
+files <- sort(list.files(path))
+personID <- sapply(strsplit(files,"\\."),function(x){substr(x[1],10,15)})
+unq_personID <- sort(unique(personID))
+names(unq_personID) <- 1:length(unq_personID)
+use_personID <- unq_personID[fold4_person]
+use_dayID <- c("day0","day7")
+use_files <- NULL
+use_files_day <- NULL
+use_files_person <- NULL
+for(person in use_personID){
+  for(day in use_dayID){
+    filename <- paste0("nomalized",person,".",day,".B.fcs")
+    if(filename %in% files){
+      use_files <- c(use_files,filename)
+      use_files_day <- c(use_files_day,day)
+      use_files_person <- c(use_files_person,person)
+    }
+  }
+}
+
+#datalistにFACS�?ータを�?��?
+library(flowCore)
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+facs_datalist <- list()
+for(i in 1:length(use_files)){
+  file1 <- paste0(path,"/",use_files[i])
+  fcs <- read.FCS(file1,transformation=FALSE)
+  facs_datalist[[i]] <- fcs@exprs[,markers]
+}
+
+#計�?
+result <- ker_facs(facs_datalist)
+distmat_est1 <- result$distmat_est
+mds_eig1 <- result$mds_eig
+mds1 <- result$mds
+x_grid1 <- result$x_grid
+colnames(x_grid1) <- markers
+P_knn1 <- result$P_knn
+P_est1 <- result$P_est
+F_dash1 <- result$F_dash
+
+#Save the result and plot
+library(maptools)
+write.csv(distmat_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_distmat_est1.csv",quote = F,row.names=F)
+write.csv(P_knn1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_P_knn.csv",quote = F,row.names=F)
+write.csv(P_est1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_P_est.csv",quote = F,row.names=F)
+write.csv(F_dash1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_F_dash.csv",quote = F,row.names=F)
+write.csv(x_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_x_grid.csv",quote = F,row.names=F)
+png("~/work/kekka/daykekka/2018.1/kernelMDS_fold4_eigen.png")
+barplot(mds_eig1[mds_eig1>=0],ylab="Eigen Value",xlab="MDS coordinate",cex.lab=1.5)
+dev.off()
+png("~/work/kekka/daykekka/2018.1/kernelMDS_fold4_MDS.png")
+plot(mds1[,1],mds1[,2],col=rep(c("red","blue"),10),xlab="MDS1",ylab="MDS2")
+pointLabel(mds1[,1],mds1[,2],as.character(rep(seq(1,10,1),each=2)))
+dev.off()
+
+markers <- c("FITC-A","PE-A","PerCP-Cy5-5-A","PE-Cy7-A","APC-A","Pacific Blue-A")
+markers_pro <- c("CD21","CD138","IgM","CD19","IgD","CD27")
+colnames(x_grid1) <- markers_pro
+focus_grid_num <- 500
+top_grid1 <- x_grid1[order(F_dash1[,2],decreasing = T)[1:focus_grid_num],]
+bot_grid1 <- x_grid1[order(F_dash1[,2])[1:focus_grid_num],]
+top_grid2 <- x_grid1[order(F_dash1[,3],decreasing = T)[1:focus_grid_num],]
+bot_grid2 <- x_grid1[order(F_dash1[,3])[1:focus_grid_num],]
+F1_top <- apply(top_grid1,1,B_grid_check,cf_b)
+F1_bot <- apply(bot_grid1,1,B_grid_check,cf_b)
+F2_top<- apply(top_grid2,1,B_grid_check,cf_b)
+F2_bot <- apply(bot_grid2,1,B_grid_check,cf_b)
+```
+
+
+#ぞれぞれのシミュレーション条件でのFを描�?
+Fn <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_norm_F_dash.csv",header=T)
+F1d <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_F_dash.csv",header=T)
+F6d <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_F_dash.csv",header=T)
+
+x_gridn <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_norm_x_grid.csv",header=T)
+x_grid1d <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_x_grid.csv",header=T)
+x_grid6d <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_x_grid.csv",header=T)
+
+png("~/work/kekka/daykekka/2018.1/kernelMDS_norm_F.png")
+matplot(x_gridn[,1],Fn,col=c("black","red","blue"),xlab="x",ylab="C(x),F(x)",cex.lab=1.2)
+dev.off()
+
+png("~/work/kekka/daykekka/2018.1/kernelMDS_1dmix_F.png")
+matplot(x_grid1d[,1],F1d,col=c("black","red","blue"),xlab="x",ylab="C(x),F(x)",cex.lab=1.2)
+dev.off()
+
+top_grid1 <- x_grid6d[order(F6d[,2],decreasing = T)[1:100],]
+bot_grid1 <- x_grid6d[order(F6d[,2],decreasing = F)[1:100],]
+write.csv(top_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_topgrid.csv",quote=F,row.names=F)
+write.csv(bot_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_6dmix_botgrid.csv",quote=F,row.names=F)
+
+Freal <- read.csv("~/work/kekka/daykekka/2018.1/kernelMDS_fold4_F_dash.csv",header=T)
+top_grid1 <- x_grid6d[order(Freal[,2],decreasing = T)[1:100],]
+bot_grid1 <- x_grid6d[order(Freal[,2],decreasing = F)[1:100],]
+F1_top <- apply(top_grid1,1,B_grid_check,cf_b)
+F1_bot <- apply(bot_grid1,1,B_grid_check,cf_b)
+write.csv(top_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_topgrid.csv",quote=F,row.names=F)
+write.csv(bot_grid1,file="~/work/kekka/daykekka/2018.1/kernelMDS_fold4_botgrid.csv",quote=F,row.names=F)

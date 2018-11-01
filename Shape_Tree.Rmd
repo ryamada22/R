@@ -1,0 +1,442 @@
+---
+title: "Shape -> Tree"
+author: "ryamada"
+date: "2017”N9ŒŽ11“ú"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+library(devtools)
+library(rgl)
+library(knitr)
+library(e1071)
+library(ape)
+library(igraph)
+library(gtools)
+install_github("ryamada22/Ronlyryamada")
+library(Ronlyryamada)
+library(RFOC)
+library(onion)
+knitr::opts_chunk$set(echo = TRUE)
+knit_hooks$set(rgl = hook_rgl)
+```
+
+
+# Overview
+
+- Make a triangle mesh of an object homeomorphic to S2 (sphere): $M_o$ .
+
+- Calculate graph distance matrix of $M_o$ ($D(M_o)$). This matrix is a representation of the shape and the goal of this note is to express this distance matrix information in a tree structure.
+
+- Calculate the shortest path from a vertex ($\rho$ (root vertex)) to all vertices. Then Make a tree graph that is a subgraph of $M_o$ whose edges are in the shortest paths: $T_o$.
+
+- Label the vertices with the graph distance from $rho$: Z(v) .
+
+- Spherize the mesh on to S2 : $M_s$ . The tree counter part is $T_s$ .
+
+- Open up the sphere to $R^2$ plane; Riemann sphere ( https://en.wikipedia.org/wiki/Riemann_sphere ) ; select a vertex of mesh on $M_s$ and put the verteces on the origin of $R^2$ plane: $M_r$ . The tree counter part is $T_r$ .
+
+- Make a cycle starting from $rho$ and returning to $rho$: Select an edge of edges of $rho$, walk "around" the $T_* (T_o,T_s, T_r)$ clockwise where all edges shoud be walked on both sides.
+
+- Add additional nodes and edges to the tree with label values on the nodes so that a definition of distance on the tree represents $D(M_o)$ . The definition of distance on the tree will be given afterwards.
+
+# $M_o$ and $M_s$
+
+Let's make a 3D object with its spherized counterpart for practice.
+```{r}
+my.cell.sim.3 <- function (n = 5, k = 5, n.mesh = 32, n.step = 50, scale.shift = 0.1, 
+    scale.rotation1 = 0.1, scale.rotation2 = 0.1, scale.shear = 0.1, 
+    file.name = "hoge") 
+{
+    A. <- matrix(runif(n^2), n, n)
+    A.[1, 1] <- k
+    B <- matrix(rnorm(n^2), n, n)
+    xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+
+    M <- diag(rep(1, 4))
+    M[1:3, 4] <- runif(3) * scale.shift
+    theta1 <- runif(1) * scale.rotation1
+    theta2 <- runif(1) * scale.rotation2
+    Mm <- diag(rep(1, 3))
+    Mm[1:2, 1:2] <- my.2d.rot(theta1) %*% Mm[1:2, 1:2]
+    Mm[2:3, 2:3] <- my.2d.rot(theta2) %*% Mm[2:3, 2:3]
+    M[1:3, 1:3] <- Mm
+    M[4, 1:3] <- rnorm(3) * scale.shear
+    for (i in 1:n.step) {
+        A. <- A. + rnorm(n^2, 0, 0.05)
+        xxx <- my.spherical.harm.mesh(A = A., n = n.mesh)
+        xxxx <- cbind(xxx$v, rep(1, length(xxx$v[, 1])))
+        rot.xxxx <- t(M %*% t(xxxx))
+        rot.xxxx. <- rot.xxxx[, 1:3]/rot.xxxx[, 4]
+
+        file.out <- paste(file.name, i, ".obj", sep = "")
+        if(i == n.step){
+					
+
+				}
+        
+    }
+    ret <- list(xyz.o = rot.xxxx.,xyz.s = my_sphere_tri_mesh(n.mesh)$xyz,face = xxx$f,edge=xxx$edge)
+    #ret <- list(vb = t(rot.xxxx.),it=t(xxx$f),Ms=my_sphere_tri_mesh(n.mesh))
+		return(ret)
+}
+my.plot3d.trimesh <- function(M,edge=NULL,overlap=TRUE){
+  plot3d(M$xyz)
+  if(is.null(edge)){
+    segments3d(M$xyz[c(t(M$edge)),])
+  }else{
+    if(overlap){
+      segments3d(M$xyz[c(t(edge)),],color="red")
+      segments3d(M$xyz[c(t(M$edge)),],color="gray")
+    }else{
+      segments3d(M$xyz[c(t(edge)),])
+    }
+  }
+}
+```
+
+```{r}
+MoMs <- my.cell.sim.3(n.mesh=5)
+MoMs.edges <- MoMs$edge
+Mo <- list(xyz=MoMs$xyz.o,edge=MoMs$edge,face=MoMs$face)
+Ms <- list(xyz=MoMs$xyz.s,edge=MoMs$edge,face=MoMs$face)
+```
+```{r,rgl=TRUE}
+my.plot3d.trimesh(Mo)
+```
+```{r,rgl=TRUE}
+my.plot3d.trimesh(Ms)
+```
+
+# $D(M_o)$, graph distance matrix of $M_o$ and edge length
+
+```{r}
+g <- graph.edgelist(Mo$edge,directed=FALSE)
+edge.length.o <- sqrt(apply((Mo$xyz[Mo$edge[,1],]-Mo$xyz[Mo$edge[,2],])^2,1,sum))
+D.Mo <- distances(g,weights=edge.length.o)
+image(D.Mo)
+```
+
+# The root vertex, $\rho$, and the subgraph tree as the union of shortest paths from $\rho$, $T_o$ and $T_s$ .
+
+```{r}
+my.path.edge <- function(g,v,Edge.len){
+	sh.path <- all_shortest_paths(g,v,weights=Edge.len,mode="out")
+	len.path <- sapply(sh.path[[1]],length)
+	n.path.edge <- sum(len.path)-length(len.path)
+	path.edge <- matrix(0,2,n.path.edge)
+	cnt <-1 
+	for(i in 1:vcount(g)){
+		tmp <- sh.path[[1]][[i]]
+		if(length(tmp)>1){
+			tmp2 <- tmp[1:(length(tmp)-1)]
+			tmp3 <- tmp[2:length(tmp)]
+			tmp4 <- rbind(tmp2,tmp3)
+			path.edge[,cnt:(cnt+length(tmp2)-1)] <- tmp4
+			cnt <- cnt+length(tmp2)
+		}
+	}
+	ret <- unique(t(path.edge))
+	ret <- t(apply(ret,1,sort))
+	return(ret)
+}
+```
+```{r}
+rho <- sample(1,1:length(Mo$xyz[,1]))
+path.edge <- my.path.edge(g,rho,edge.length.o)
+```
+```{r,rgl=TRUE}
+my.plot3d.trimesh(Mo,path.edge,overlap=TRUE)
+spheres3d(Mo$xyz[rho,],radius=0.1,color="red")
+```
+
+```{r,rgl=TRUE}
+my.plot3d.trimesh(Ms,path.edge,overlap=TRUE)
+spheres3d(Ms$xyz[rho,],radius=0.1,color="red")
+```
+
+# $Z(v)$; label value, distance from $\rho$
+
+```{r}
+Z <- D.Mo[rho,]
+my.plot3d.trimesh(Mo,path.edge,overlap=TRUE)
+spheres3d(Mo$xyz[rho,],radius=0.1,color="red")
+spheres3d(Mo$xyz,radius=Z/max(Z)*0.1)
+```
+
+# $M_r$, plane graph with Riemann sphere transformation
+
+Select a triangle face that should corresponds to the out-most triangle when opened on to $R^2$ plane.
+
+Rotate $M_s$ so that the selected face comes to the direction (0,0,1).
+```{r}
+# Riemann sphere transformation
+my.Sp2Plane <- function(X){
+  tmp <- X[,1] + 1i * X[,2]
+  ang <- Arg(tmp)
+  R <- 2*(Mod(tmp))/(1-X[,3])
+  return(list(r=R,ang=ang))
+}
+# Utility fx: outer product of 3d vectors
+my.outer.3dv <- function(u,v){
+  return(c(u[2]*v[3]-u[3]*v[2],u[3]*v[1]-u[1]*v[3],u[1]*v[2]-u[2]*v[1]))
+}
+
+# Rotation that rotates a vector u to a vector v
+# Rotation can be calculated with the axis vector with angle
+
+my.3drotation.quaternion <- function(u,v){
+  out <-my.outer.3dv(u,v)
+  out <- out/sqrt(sum(out^2))
+  angle <- acos(sum(u*v)/(sqrt(sum(u^2)*sqrt(sum(v^2)))))
+  cos(angle/2) + sin(angle/2) * (Hi*out[1]+Hj*out[2]+Hk*out[3])
+}
+
+my.3drotation <- function(X,u,v){
+  q <- my.3drotation.quaternion(u,v)
+  tmp <- X[,1] * Hi + X[,2] *Hj + X[,3] * Hk
+  ret <- q * tmp * Conj(q)
+  return(cbind(i(ret),j(ret),k(ret)))
+}
+# The faceid-th face triangle is the outer most and the planar graph is drawn on the plane. Ms is trianglular mesh on the sphere. faceid is an integer. k is magnification factor of the outer most triangle.
+my.planegraph <- function(Ms,faceid,k=1.1){
+  face.v <- Ms$face[faceid,]
+  
+  face.xyz <- Ms$xyz[face.v,]
+  direc <- apply(face.xyz,2,mean)
+  direc <- direc/sqrt(sum(direc^2))
+  xyz <- my.3drotation(Ms$xyz,direc,c(0,0,1))
+  rang.complex <- my.Sp2Plane(xyz)
+  max.R <- max(rang.complex$r)
+  inside.max.R <- max(rang.complex$r[-face.v])
+  
+  face.v.ang <- rang.complex$ang[face.v]
+  tmp1 <- cos((face.v.ang[1]-face.v.ang[2])/2)
+  tmp2 <- cos((face.v.ang[1]-face.v.ang[3])/2)
+  tmp3 <- cos((face.v.ang[2]-face.v.ang[3])/2)
+  k2 <- min(abs(c(tmp1,tmp2,tmp3)))
+  rang.complex$r[Ms$face[faceid,]] <- inside.max.R/k2 * k
+  tmp <- rang.complex$r * exp(1i * rang.complex$ang)
+  return(cbind(Re(tmp),Im(tmp)))
+}
+
+# Plot the planar graph
+# When edge=NULL, all edges are drawn
+# When edge is given as 2-column matrix, the given edges only are drawn (overlap=FALSE) or are highlighted (overlap=TRUE).
+my.plot.plane.graph <- function(Mr,faceid,edge=NULL,overlap=TRUE){
+  vs <- sort(Mr$face[faceid,])
+  if(is.null(edge)){
+    edge <- Mr$edge
+    plot(Mr$xyz,pch=20,cex=0.1)
+    edge1 <- edge
+    segments(Mr$xyz[edge1[,1],1],Mr$xyz[edge1[,1],2],Mr$xyz[edge1[,2],1],Mr$xyz[edge1[,2],2])
+  }else{
+    if(overlap){
+      edge.ori <- Mr$edge
+      plot(Mr$xyz,pch=20,cex=0.1)
+      edge1 <- edge.ori
+      segments(Mr$xyz[edge1[,1],1],Mr$xyz[edge1[,1],2],Mr$xyz[edge1[,2],1],Mr$xyz[edge1[,2],2],col="gray")
+      edge1 <- edge
+      segments(Mr$xyz[edge1[,1],1],Mr$xyz[edge1[,1],2],Mr$xyz[edge1[,2],1],Mr$xyz[edge1[,2],2],col="red")
+    }else{
+      plot(Mr$xyz,pch=20,cex=0.1)
+      edge1 <- edge
+      segments(Mr$xyz[edge1[,1],1],Mr$xyz[edge1[,1],2],Mr$xyz[edge1[,2],1],Mr$xyz[edge1[,2],2])
+    }
+  }
+}
+```
+
+Select a face having $\rho$.
+
+```{r}
+face.with.rho <- which(apply(Ms$face-rho,1,prod)==0)
+face.id <- sample(face.with.rho,1)
+#face.id <- sample(1:length(Ms$face[,1]),1)
+Mr <- list(xyz = my.planegraph(Ms,face.id),edge=Ms$edge,face=Ms$face)
+```
+```{r}
+my.plot.plane.graph(Mr,face.id)
+points(Mr$xyz[rho,1],Mr$xyz[rho,2],pch=20,cex=2,col=3)
+```
+```{r}
+my.plot.plane.graph(Mr,face.id,edge=path.edge)
+points(Mr$xyz[rho,1],Mr$xyz[rho,2],pch=20,cex=2,col=3)
+```
+
+```{r}
+my.plot.plane.graph(Mr,face.id,edge=path.edge,overlap=FALSE)
+points(Mr$xyz[rho,1],Mr$xyz[rho,2],pch=20,cex=2,col=3)
+```
+
+# $T_r$, the tree in $R^2$ plane and $C_r$, cycle around the tree
+```{r}
+Tr <- list(xyz = Mr$xyz,edge=path.edge,face=Mr$face)
+```
+```{r}
+# Mr has information for planar arrangement of a tree.
+# rho is an integer to specify the starting vertex.
+# to is a vertex id of the 1st edge from rho heading to.
+my.cycle.tree <- function(Mr,rho,to=NULL){
+  # each edge should be count twice for both directions
+  edge2 <- rbind(Mr$edge,Mr$edge[,2:1])
+  # Angular direction of each directed edge is calculated usign complex numbers
+  e.vec <- Mr$xyz[edge2[,2],]-Mr$xyz[edge2[,1],]
+  e.vec. <- e.vec[,1] + 1i * e.vec[,2]
+  ang <- Arg(e.vec.)
+  # edge.from is a list of edge ids from each vertices
+  # edge ids is sorted with their angular directions,
+  # because the edges should be taken one by one in the order
+  # of the angles
+  edge.from <- list()
+  for(i in 1:length(Mr$xyz[,1])){
+    edge.from[[i]] <- which(edge2[,1]==i)
+    tmp.ord <- order(ang[edge.from[[i]]],decreasing=TRUE)
+    edge.from[[i]] <- edge.from[[i]][tmp.ord]
+    #print(ang[edge.from[[i]]])
+  }
+  # Starting from the first edge specified with arguments,
+  # the edges should be added to the cycle,
+  # until all the edges are consumed.
+  loop <- TRUE
+  # visited indicates whether the vertices are already visited or not
+  # In case of vertices visited already, the edges should be
+  # selected in the order depending on their angles
+  visited <- rep(0,length(Mr$xyz[,1]))
+  #print("cycle len")
+  #print(length(edge2[,1]))
+  edge.order <- rep(NA,length(edge2[,1]))
+  # first edge specification
+  if(is.null(to)){
+    first.edge <- 1
+  }else{
+    first.edge <- which(edge2[edge.from[[rho]],2]==to)
+  }
+  # The edge order from rho should be rearranged
+  # so that the top edge id should be the selected edge id
+  if(first.edge!=1){
+    edge.from[[rho]] <- edge.from[[rho]][c(first.edge:length(edge.from[[rho]]),1:(first.edge-1))]
+  }
+  # Register the first edge to the cycle
+  edge.order[1] <- edge.from[[rho]][1]
+  # The added edge should be removed from the edge.from
+  edge.from[[rho]] <- edge.from[[rho]][-1]
+  # renew the visit-status
+  visited[rho] <- 1
+  
+  current.edge <- edge.order[1]
+  # counter
+  cnt <- 1
+  while(loop){
+    # The next node
+    next.node <- edge2[current.edge,2]
+    # If already visited, take the top edge
+    if(visited[next.node]==1){
+      # register the selected edge and
+      # remove the edge from the edge.from list
+      # renew the status
+      edge.order[cnt+1] <- edge.from[[next.node]][1]
+      edge.from[[next.node]] <- edge.from[[next.node]][-1]
+      cnt <- cnt+1
+      current.edge <- edge.order[cnt]
+    }else{
+      # Otherwise, select the edge for the first time
+      # for the visited node
+      # The incoming edge's angle should be converted to
+      # the opposite direction
+      in.ang <- ang[current.edge] - pi
+      if(in.ang < - pi){
+        in.ang <- in.ang + 2 * pi
+      }
+      # the out-going edge closest to the opposite direction
+      # in terms of clockwise rotation way, should be selected
+      candidate.edge <- edge.from[[next.node]]
+      candidate.ang <- ang[candidate.edge]
+      # If only one candidate, select it
+      if(length(candidate.edge)==1){
+        #print("1 candidate")
+        edge.order[cnt+1] <- edge.from[[next.node]][1]
+        edge.from[[next.node]] <- edge.from[[next.node]][-1]
+        cnt <- cnt+1
+        current.edge <- edge.order[cnt]
+      }else{
+        # If multiple candidates
+        # do not take the edge that is the opposite (return.edge.id)
+        # of the incoming edge
+        #print("multiple candidates")
+        return.edge.id <- which(edge2[candidate.edge,2]==edge2[current.edge,1])
+        #return.edge.id <- which(candidate.edge==return.edge)
+        # From the candidates after the opposite removed,
+        # take the closest edge to the opposite direction
+        # in terms of clockwise rotation
+        new.candidate.edge <- candidate.edge[-return.edge.id]
+        new.candidate.ang <- candidate.ang[-return.edge.id]
+        tmp.ang <- new.candidate.ang - in.ang
+        tmp.ang[which(tmp.ang < 0)] <- tmp.ang[which(tmp.ang < 0)] + 2*pi
+        selected <- which(tmp.ang==max(tmp.ang))
+        selected.edge <- new.candidate.edge[selected]
+        selected.edge.id <- which(candidate.edge==selected.edge)
+        edge.order[cnt+1] <- selected.edge
+        # The order of edges of edge.from is ordered
+        # Afterwards, the top edge should be selected 
+        if(selected.edge.id==1){
+          
+        }else{
+          edge.from[[next.node]] <- edge.from[[next.node]][c(selected.edge.id:length(edge.from[[next.node]]),1:(selected.edge.id-1))]
+        }
+        edge.from[[next.node]] <- edge.from[[next.node]][-1]
+        
+        cnt <- cnt+1
+        current.edge <- edge.order[cnt]
+      }
+      visited[next.node] <- 1
+    }
+    # If all edges are used, loop is over.
+    if(cnt==length(edge.order)){
+      loop <- FALSE
+    }
+
+  }
+  node.order <- c(edge2[edge.order,1],rho)
+  return(list(e=edge.order,v=node.order))
+}
+```
+```{r}
+Cycle <- my.cycle.tree(Tr,rho)
+plot(Tr$xyz[Cycle$v,],type="l")
+text(Tr$xyz[Cycle$v,]+0.1,labels=Cycle$v)
+```
+
+# $T_D$ and $Z_D$ a tree with value labels representing $D_o$
+
+Recursively add vertices and edges to the $T_r$ and their value labels so that triangle faces, two out of three of whose edges are in the state where their edge length can be calculated with the tree an label information.
+
+## How to calculate "distance" between two vertices on the tree with the value labels
+
+Each edge's length is difined as the difference between the label values of the edge's vertices.
+
+The distance between two vertices should be the sum of edge length as above along the cycles. 
+
+There are two way to walk around the cycle, clockwise and counter-clockwise.
+
+The distance should be the smaller value of the two ways.
+
+When walking around the tree, you can jump from a vertex u to a vertex v if the label values of u and v are the same and if all the label values between u and v along the cycle walk are more than the value of u and v.
+
+```{r}
+my.metric.tree <- function(Tr,Z){
+  loop <- TRUE
+  all.face.edge <- rbind(Tr$face[,1:2],Tr$face[,2:3],Tr$face[,c(1,3)])
+  all.face.edge <- t(apply(all.face.edge,1,sort))
+
+  while(loop){
+    edge <- Tr$edge
+    
+  }
+  return(list(Tr,Z))
+}
+```

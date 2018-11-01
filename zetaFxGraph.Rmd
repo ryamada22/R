@@ -1,0 +1,702 @@
+---
+title: "グラフのゼータ関数"
+author: "ryamada"
+date: "2018年6月24日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## ゼータ関数と言えばリーマンのゼータ関数
+
+$$
+\zeta_R(s) = \sum_{i=1}^\infty \frac{1}{i^s} =\sum_{z \in Z} \frac{1}{z^s}= \prod_{p \in P}\frac{1}{ (1-p^{-s})}
+$$
+
+
+* リーマンのゼータ関数は、複素数 $s$の関数である
+* 自然数全体$Z$に関する、$s$で定まる関数$\frac{1}{z}$総和である
+* 素数全体$P$に関する、$s$で定まる関数$\frac{1}{(1-p^{-s})}$の総積である
+* ただし、すべての自然数は、素数の積で表される。また、素数の重複あり組みあわせのすべてに対応する自然数が存在する
+
+以下の展開に注意すると、$\prod_{p \in P}\frac{1}{ (1-p^{-s})}$の中に、すべての自然数の$-s$乗の和が含まれることが示せる。
+$$
+\frac{1}{1-p^{-s}} = \sum_{i=1}^\infty (p^{-s})^i
+$$
+
+### Rでいじってみよう
+
+```{r}
+my.zeta.riemann1 <- function(n,s){
+  sum(1/((1:n)^s))
+}
+library(primes) # 素数を扱うパッケージ
+my.zeta.riemann2 <- function(n,s){
+  p <- generate_primes(max =n)
+  prod((1/(1-p^(-s))))
+}
+```
+
+```{r}
+maxn <- 50
+s <- 2.4 # 収束確認のために実数で試してみる
+
+val1 <- val2 <- rep(0,maxn)
+for(i in 1:maxn){
+  val1[i] <- my.zeta.riemann1(i,s)
+  val2[i] <- my.zeta.riemann2(i,s)
+}
+```
+```{r}
+library(pracma) # Riemann's zeta関数を実装しているパッケージ
+true.val <- zeta(s) # ゼータ関数の値の「正解」
+matplot(cbind(val1,val2),type="l")
+abline(h=true.val,col=3)
+```
+### リーマンのゼータ関数の図示
+
+リーマンのゼータ関数は複素関数である。
+
+"https://ja.wikipedia.org/wiki/%E3%83%AA%E3%83%BC%E3%83%9E%E3%83%B3%E3%82%BC%E3%83%BC%E3%82%BF%E9%96%A2%E6%95%B0"
+参照
+
+```{r}
+maxv <- 4
+b <- 0.01
+re <- seq(from=-maxv,to=maxv,by=b)
+im <- seq(from=-maxv,to=maxv,by=b)
+len <- length(re)
+ri <- expand.grid(re,im)
+s <- ri[,1] + 1i * ri[,2]
+z <- zeta(s)
+```
+```{r}
+# 実部の様子
+image(re,im,matrix(Re(z),len,len),main="real part")
+# 虚部の様子
+image(re,im,matrix(Im(z),len,len),main="imaginary part")
+# log(長さ)の様子
+image(re,im,matrix(1/(Mod(z)),len,len),main="Norm part")
+# 角度の様子
+image(re,im,matrix(Arg(z),len,len),main="Arg part")
+
+```
+
+
+## ゼータ関数は色々ある
+
+リーマンのゼータ関数は、次のような関数であると言える
+
+*「自然数全体」を把握するために、その構成要素である「素数全体」を使って表す
+* 「全体」はとても複雑なので、その複雑さを「関数」に押し込ん表す
+* 関数は、$(s,f(s))$という値の組をたくさん持っているので、複雑な状態を持つことができる
+
+リーマンのゼータ関数を用いて、素数に関する情報が得られたりするわけであるが、それとは別に、上記の性質を「自然数」以外に見出すことで、様々なゼータ関数が定義されている。
+
+グラフのゼータ関数もその一つである。
+
+## グラフのゼータ関数
+
+### 対象とするグラフ
+
+ここで考えるグラフは
+
+* ノード数が有限
+* 連結
+* 次数1のノードはない(行き止まりになるノードがない)
+* ランクが1以上(ランクとは、グラフに(最大)全域木を取ったとき、最小全域木に入っていない辺の数)
+
+とする
+
+### グラフにおける「自然数」と「素数」
+
+#### 「素数」
+
+* グラフ上のある点から出発して戻ってくるパスをグラフが持つ「数」とする
+
+ただし、ぐるりと回って戻ってくるパスにいくつかの条件を付ける。
+
+* Closed: 出発ノードと終着ノードは同じであるとする
+* Backtrackless: あるエッジを辿って、すぐさまそのエッジを逆向きに辿ってはいけない
+* Tailless: 戻って来るときに、最後のエッジが最初のエッジの逆向きエッジではいけない(出発点・到着点のところは、ふくらみを持たないといけない)
+* Primitive: 上記の条件を満足する周回パスを、複数回、回ってできるパスも上記の条件を満足してしまうが、複数周回のものは除き、単回周回のものを指してprimitiveと言う
+
+これをClosed backtrackless tailess primitive paths (CBTPP) と呼ぶ。
+
+今、あるCBTPPがあったとき、その始点終点をCBTPP上の別点に置き換えたものも、同じCBTPPとみなす(Equivalence class)ことにする。
+
+このように、CBTPPでequivalence classesによって集約したclassesをグラフの「素数」とする。
+
+#### 「素数」の表現方法
+
+無向グラフXにn本のエッジがあるとする。それらを$E=\{\epsilon_1,...,\epsilon_n\}$とする。
+
+このエッジに向きを考慮し、2倍の本数の向きのあるエッジの集合$E'=\{e_1,...,e_n,e_1^{-1},...,e_n^{-1}\}$を考える。
+
+パスCを
+
+$$
+C = a_1 a_2 ,,, a_s; a_i \in E'
+$$
+ただし、$a_1$の始点と$a_n$の終点は同じノード(Closed)、 $a_{n+1} \ne a_n^{-1}$ (backtrackless)、$a_s \ne a_1^{-1}$ (Tailless)、$C \ne D^m$ (primitive)である。
+
+また、equivalent classとは$[C] = \{a_1a_2...a_s,a_2a_3...a_sa_1,...,a_s a_1...a_{s-1}\}$と同一視する、ということである。
+
+この$[C]$が「素数」。
+
+ちなみに、
+
+$$
+a_1 a_2 a_3 a_4 a_5 a_6 a_7 a_8 a_9; a_7 = a_3^{-1}
+$$
+というようなパスも素数に対応する。途中で同じエッジを異なる向きに1回ずつ通るような周回パスである。
+
+#### 「自然数」: この節はうそかもしれない
+
+自然数は素数の積であるから、グラフの「自然数」はグラフの「素数」の積。
+
+同じ$[C]$の複数回の周回パスは$[C]^m; m \ge 2$という「素数ではない自然数」。
+
+$[C_1]\times [C_2]$という２つのグラフ素数の積が表すのは、２つの周回パスの順序によらないペアであって、これも「素数ではない自然数」。
+
+##### グラフの周回パスという「自然数」の集合
+
+グラフ上に周回パスが無限に存在する。それが「自然数」として表される周回パスequivalence全体。
+
+それらは、「素数」に相当する周回パスequivalenceの積であって、「周回パス全体(自然数)」に関するある情報が、「素数」によって表せる、というのが、グラフのゼータ関数の意味するところである。
+
+## グラフのゼータ関数
+
+グラフの「素数」の集合を$[P]$と書く。
+
+Closed backtracless tailless primitive pathsのequivalence classesのことである。
+
+今、この$p \in [P]$には長さがある。それを$\nu(p)$と書くことにする。
+
+このとき以下をグラフのゼータ関数と言う。
+
+
+$$
+\zeta_G(s) = \prod_{p \in [P]}\frac{1}{(1-s^{\nu(p)})}
+$$
+
+グラフ$G$上に取れる、すべての周回パスに関する情報をもった関数で、$[P]$の要素の長さを用いた複素多項式の逆数となっている。
+
+## グラフのゼータ関数の線形代数的表現３種
+
+グラフ$G$は、頂点の集合とエッジの集合と、エッジの長さ情報とで決まっている。
+
+その情報を使うと、$\zeta_G(s)$が正方行列の行列式の計算を介して計算できることが知られており、３通りの方法がある。
+
+１つは、ノードペアの行列($A_v,Q_v$,$|V|^2$行列)を基本としたもの(vertex zeta function)、２つ目はエッジペアの行列($W_E$,$|E|^2$行列)を基本としたもの(edge zeta function)、3つ目はグラフに全域木を取り全域木に含まれないエッジのペアの行列($W_P$,$r^2$行列、ただし$r=|E|-(|V|-1)$、このrは全域木に含まれないエッジの本数)を基本としたもの(path zeta function)である。
+
+$$
+\zeta_G(u)^{-1} = \zeta_G^V(u)^{-1}=(1-u)^{r}\det{(I-A_v u + Q_v u^2)}\\
+=\zeta_G^E(u)^{-1}= \det{(I-W_E)}\\
+=\zeta_G^F(u)^{-1}= \det(I-Z_F)
+$$
+
+### $\zeta_G^E(s)$の意味
+
+
+$$
+\zeta_G^E(u)^{-1} = \det{(I-W_E)}=\sum_{p \in [P]}(sgn(p)\times(1-u)^{|p|})
+$$
+ただし$sgn(p)$はサイクルを順列として評価したときの置換の偶奇。$|p|$はサイクルの長さ。
+
+
+
+
+なぜ行列式がサイクルの列挙をするのか考えてみる。
+
+
+$$
+\det{(I-W_E)} = \sum_{\sigma \in S} sgn(\sigma) \prod(diag((I-W_E)[,\sigma]))
+$$
+行列式は上記のように表せる。
+
+この読み方は以下の通りである。
+
+* 行列の列を入れ替えることを考える。
+* 入れ替えの場合わけ(順列)のすべて($S$)について考える。
+* 入れ替えた後、その対角成分の積を取る。
+* すべての場合について足し合わせる。
+* ただし、足し合わせるときに、偶置換の場合と奇置換の場合とで符号を入れ替える。
+
+
+たとえば、３本のエッジ$e_{s1},e_{s2},e_{s3}$がサイクルを作っているとする。
+
+$W_E$では$[s_1,s_2],[s_2,s_3],[s_3,s_1]$成分に0以外の値が入っている。
+
+$s_1$列に、$s_2$列を持ってきて、$s_2$列に$s_3$列を持ってきて、
+$s_3$列に$s_1$列を持ってくると、
+
+$s_1,s_2,s_3$以外の列は変えずに、$[s_1,s_2],[s_2,s_3],[s_3,s_1]$成分の値が、それぞれ$[s_1,s_1],[s_2,s_2],[s_3,s_3]$成分に移動する。
+
+$s_1,s_2,s_3$列以外は入れ替えないとすると、対角成分には、
+$[s_1,s_1],[s_2,s_2],[s_3,s_3]$と(たくさんの)1が並んでいて、0は含まれない。
+
+したがって、対角成分の積を取れば、0でない値が取れる。
+
+$[s_1,s_2],[s_2,s_3],[s_3,s_1]$に、エッジペアの長さに応じた値を$w_{a_ia_j} =s^{\frac{L(a_i) + L(a_j)}{2}}$のように入れておけば、対角成分の積が、長さの和に応じた値として得られることがわかる。
+
+結局、順列のたくさんの場合のうち、サイクルになっている場合にのみ、0以外の値が得られ、それに長さ情報が含まれていることになる。
+
+$\prod_{p \in [P]}(1-N_E(p))$で$-N_E(p)$と、負の符号がついているので、偶置換・奇置換によって値の正負が交代することとも符号する。
+
+小さな行列でこのことを確かめてみる。
+
+### 例１
+
+次のようなグラフを考える。
+```{r}
+library(igraph)
+#el <- rbind(c(1,2),c(2,3),c(3,4),c(4,1),c(1,3))
+el <- rbind(c(1,2),c(2,3),c(3,1),c(1,4))
+g <- graph.edgelist(el,directed =FALSE)
+plot(g)
+```
+
+エッジ数が4の無向グラフであるが、各エッジを2方向2本ずつとして、エッジ数8の有向グラフとして考える。
+
+```{r}
+my.bigraph <- function(g){
+  el <- as_edgelist(g)
+  el2 <- rbind(el,cbind(el[,2],el[,1]))
+  ret <- graph.edgelist(el2)
+  return(ret)
+}
+```
+```{r}
+g.bi <- my.bigraph(g)
+plot(g.bi,edge.label=1:8,edge.curved=TRUE)
+```
+
+8本のエッジに1-8のID番号をつけて、$8\times 8$のエッジ接続情報の行列$W_E$を作る。
+
+たとえば、edge 1 はvertex 2に入り、edge 2はvertex 2から出ているから、$W_E$の$(1,2)$成分は1とする。
+```{r}
+my.WE <- function(g){
+  el <- as_edgelist(g)
+  n.e <- length(el[,1])
+  edge.mat <- matrix(0,n.e,n.e)
+	for(i in 1:n.e){
+		st <- el[i,1]
+		ed <- el[i,2]
+		tmp <- which(el[,1]==ed & el[,2]!=st)
+		edge.mat[i,tmp] <- 1
+	}
+  return(edge.mat)
+}
+```
+```{r}
+WE <- my.WE(g.bi)
+WE
+```
+
+edges 1,2,7を見てみよう。ノード1->2->3->1というサイクルを作っている。
+
+なので、上に示した行列の(1,2,7)列を(2->1, 7->2, 1->7)と入れ替えてみる。
+
+```{r}
+WE2 <- WE[,c(2,7,3,4,5,6,1,8)]
+WE2
+```
+
+
+このようにしてできた行列WE2の対角成分は、(1,2,7)列に1が入っていることが見て取れる。
+
+今、WEの非ゼロ成分の値を$u=3$とすれば
+```{r}
+u <- 3
+WE2. <- WE2*u
+WE2.
+```
+
+さらに、$I-WE$とした上で、列の置換を行えば(Iは単位行列)、
+
+```{r}
+IWE2. <- (diag(rep(1,8))-WE*u)[,c(2,7,3,4,5,6,1,8)]
+IWE2.
+```
+
+となる。この対角成分はすべて0ではない。
+
+したがって、対角成分の積が計算できる。
+```{r}
+prod(diag(IWE2.))
+```
+この値は、$(-u)^3$ である。
+
+```{r}
+(-u)^3
+```
+
+示したのは、サイクルがあるとき、そのサイクルに応じて列変換をすると、列変換後の行列を単位行列から引いた行列の対角成分の積は$(-u)^{|P|}$(ただし、$|P|$はサイクルの長さ)となることである。
+
+行列式はすべての列の順列について、符号を考慮した対角成分の積の和だから、
+すべてのサイクルについて順列の置換の偶奇を考慮した$(-u)^{|P|}$を足し合わせたものとなる。
+
+ちなみに、$(3,6,5)$がサイクルであり、$(1,2,7,3,6,5)$もサイクルである。
+
+```{r}
+# (3,6,5)
+(diag(rep(1,8))-WE*u)[,c(1,2,6,4,3,5,7,8)]
+# (1,2,7,3,6,5)
+(diag(rep(1,8))-WE*u)[,c(2,7,6,4,3,5,1,8)]
+
+```
+$$
+\zeta_G^E(u)^{-1} = \det{(I-W_E)}=\sum_{p \in [P]}(sgn(p)\times(-u)^{|p|})
+$$
+
+```{r}
+library(complexplus) # 複素行列計算用
+my.Ihara.zeta.e <- function(g,u){
+  g.bi <- my.bigraph(g) # 両方向グラフにする
+  we <- my.WE(g.bi) # WE 行列を作る
+  return(Det(diag(rep(1,length(we[,1]))) - we * u)) # 行列式を計算して返す
+}
+```
+
+項の符号は
+```{r}
+my.sign <- function(s){
+  I <- diag(rep(1,length(s)))
+  return(det(I[,s]))
+}
+```
+```{r}
+my.sign(c(1,2,3,4,5,6,7,8))
+my.sign(c(2,7,3,4,5,6,1,8))
+my.sign(c(1,2,6,4,3,5,7,8))
+my.sign(c(2,7,6,4,3,5,1,8))
+```
+
+```{r}
+u <- 0.3 + 1i * 0.2 # 適当な複素数
+my.Ihara.zeta.e(g,u)
+# 地道に計算するときは４つの置換
+# (1,2,3,4,5,6,7,8) 置換なし。オリジナル
+# (2,7,3,4,5,6,1,8) (1,2,7)
+# (1,2,6,4,3,5,7,8) (3,6,5)
+# (2,7,6,4,3,5,1,8) (1,2,7,3,6,5)
+1 + (-u)^3 + (-u)^3 + (-u)^6
+```
+
+このuの式を変形すると
+$$
+(1-u^3)^2 = 1 +(-u)^3 + (-u)^3 + (-u)^6 = 1 - 2 u^3 + u^6
+$$
+
+となる。
+
+この$(1-u^3)^2$を
+
+$$
+\prod_{p \in [P]} (1-u^{|p|})
+$$
+と書けることが知られている。
+
+ただし、$[P]$はClosed backtrackless tailess primitive paths (CBTPP)である。
+
+このグラフには、２つのCBTPPがあり、その長さはいずれも3である、と言うことも意味している。
+
+長さが3のパスは $(1,2,7)$と$(3,6,5)$のことで、これらがprimitiveということ。
+
+$(1,2,7,3,6,5)$は２つのprimitiveなパスの積であって、それ自身はprimitiveではないということのようだ。
+
+```{r}
+my.ok.loc <- function(WE){
+  tmp <- diag(rep(1,length(WE[,1]))) - WE * 2
+  tmp2 <- apply(apply(tmp,2,function(x)x!=0),2,function(x)which(x))
+  if(is.matrix(tmp2)){
+    tmp3 <- list()
+    for(i in 1:length(tmp2[1,])){
+      tmp3[[i]] <- tmp2[,i]
+    }
+    ret <- tmp3
+  }
+  else{
+    ret <- tmp2
+  }
+  return(ret)
+}
+my.ok.loc(WE)
+
+#apply(apply(diag(rep(1,8))-WE*u,1,function(x)x!=0),2,function(x)which(x))
+```
+
+```{r}
+my.ok.perm <- function(WE){
+  tmp <- my.ok.loc(WE)
+  tmp2 <- expand.grid(tmp)
+  tmp3 <- apply(tmp2,1,sort)
+  tmp4 <- apply(tmp3,2,diff)
+  tmp5 <- apply(tmp4,2,prod)
+  okperm <- tmp2[which(tmp5!=0),]
+  sgn <- rep(0,length(okperm[,1]))
+  nu <- sgn
+  for(i in 1:length(sgn)){
+    ok <- unlist(okperm[i,])
+    sgn[i] <- det((diag(rep(1,length(ok))))[,ok])
+    nzero <- length(which(ok-(1:length(ok)) == 0))
+    nu[i] <- length(ok)-nzero
+  }
+  return(list(okperm=okperm,sgn=sgn,nu=nu))
+}
+```
+```{r}
+my.Ihara.zeta.okperm <- function(g,u){
+  g.bi <- my.bigraph(g)
+  WE <- my.WE(g.bi)
+  ok <- my.ok.perm(WE)
+  v <- sum(ok$sgn * (-u)^ok$nu)
+  return(list(zeta=v,okperm=ok))
+}
+```
+```{r}
+okperm <- my.ok.perm(WE)
+okperm
+(diag(rep(1,length(WE[1,])))-2*WE)[unlist(okperm$okperm[1,]),]
+```
+### 例２
+
+```{r}
+#el <- rbind(c(1,2),c(2,3),c(3,4),c(4,1),c(1,3))
+el <- rbind(c(1,2),c(2,3),c(3,4),c(4,1))
+g <- graph.edgelist(el,directed =FALSE)
+plot(g)
+```
+```{r}
+g.bi <- my.bigraph(g)
+plot(g.bi,edge.label=1:10,edge.curved=TRUE)
+```
+
+```{r}
+WE <- my.WE(g.bi)
+WE
+```
+```{r}
+okperm <- my.ok.perm(WE)
+okperm
+(diag(rep(1,8))-2*WE)[unlist(okperm[1,]),]
+```
+```{r}
+u <- 3
+WE2. <- WE2*u
+WE2.
+```
+
+```{r}
+my.sign(c(2,3,8,4,5,6,7,1)) # (1,2,3,8)->(2,3,8,1)
+my.sign(c(1,2,3,7,4,5,6,8)) # (4,7,6,5)->(7,6,5,4)
+my.sign(c(2,3,8,7,4,5,6,1)) # (1,2,3,8,4,7,6,5)->(2,3,8,1,7,6,5,4)
+```
+
+```{r}
+u <- 0.3 + 1i * 0.2 # 適当な複素数
+my.Ihara.zeta.e(g,u)
+
+1  +(-1)* 2*(-u)^4 + (-u)^8
+```
+
+この関数は整数係数多項式であることは解っているのだから、
+適当にuの値を発生させ、それに対応するゼータ関数値を求めることで、
+係数は連立方程式の解として得られる。
+
+やってみる。
+
+```{r}
+my.Ihara.zeta.poly <- function(g){
+  n.e <- length(E(g))*2
+  us <- rnorm(n.e)
+  U <- matrix(0,n.e,n.e)
+  for(i in 1:length(us)){
+    #U[i,] <- (-us[i])^(1:n.e)
+    U[i,] <- (us[i])^(1:n.e)
+  }
+  vs <- rep(0,n.e)
+  for(i in 1:n.e){
+    vs[i] <- my.Ihara.zeta.e(g,us[i])
+  }
+  A <- solve(U) %*% (vs-1)
+  return(c(1,A))
+}
+
+my.Ihara.zeta.poly.calc <- function(g,u){
+  A <- round(my.Ihara.zeta.poly(g))
+  #v <- sum(A * (-u)^(0:(length(A)-1)))
+  v <- sum(A * (u)^(0:(length(A)-1)))
+  return(list(v=v,A=A))
+}
+```
+```{r}
+A <- my.Ihara.zeta.poly(g)
+round(A,3)
+```
+```{r}
+u <- 0.2 + 0.14*1i
+my.Ihara.zeta.e(g,u)
+my.Ihara.zeta.poly.calc(g,u)
+my.Ihara.zeta.okperm(g,u)
+```
+
+### 例３
+
+```{r}
+el <- rbind(c(1,2),c(2,3),c(3,4),c(4,1),c(1,3))
+g <- graph.edgelist(el,directed =FALSE)
+plot(g)
+```
+
+```{r}
+g.bi <- my.bigraph(g)
+plot(g.bi,edge.label=1:10,edge.curved=TRUE)
+```
+```{r}
+WE <- my.WE(g.bi)
+okperm <- my.ok.perm(WE)
+okperm
+```
+
+係数を求めてみる
+
+```{r}
+A <- my.Ihara.zeta.poly(g)
+round(A)
+```
+
+```{r}
+u <- rnorm(1) + rnorm(1)*1i
+my.Ihara.zeta.e(g,u)
+my.Ihara.zeta.poly.calc(g,u)
+```
+
+3角形が2つで2方向。
+4角形が1つで2方向。
+3角形を2つタンデムにつなぎ、有向エッジの重複が起こらないのが、4つ。
+3角形と4角形とをタンデムにつなぎ、有向エッジの重複が起こらないのが、4つ。
+4角形を方向を変えて2集するのが1つ。
+10辺をうまく回る方法が4つ。
+
+であることがわかる。
+
+
+
+
+$$
+\zeta_G^E(u)^{-1} = \prod_{p \in [P]}(1-N_E(p))=\det{(I-W_E)}=\sum_{p \in [P]} (sgn(p)\times(-u)^{|p|})\\
+N_E(p) = w_{a_1a_2}w_{a_2a_3}...w_{a_s a_1}=u^{\sum L_{a_i}}\\
+W_E = \begin{pmatrix}w_{a_i a_j}\end{pmatrix};
+w_{a_ia_j} =u^{\frac{L(a_i) + L(a_j)}{2}}
+$$
+
+
+8本のエッジをノードとするグラフを作ることもできる。
+```{r}
+gwe <- graph.adjacency(WE)
+plot(gwe)
+```
+
+
+
+全部で５本のエッジがあるから方向を区別して10本のエッジを考慮し、行列$W_E$は$(5\times2) \times (5 \times 2)$行列となる。
+
+```{r}
+el2 <- rbind(el,cbind(el[,2],el[,1]))
+el2
+```
+
+第１エッジの終点と第２のエッジの始点は同じノードなので、$W[1,2]=1$となる。
+
+そのようにすれば、
+```{}
+W = matrix(0,length(el2[,1]),length(el2[,1]))
+#diag(W) <- 1
+W[1,2] <- W[2,3] <- W[2,10] <- W[3,4] <- W[4,1] <- W[4,5] <- W[5,3] <- W[5,7] <- W[6,5] <- W[6,9] <- W[7,6] <- W[8,7] <- W[8,10] <- W[9,8] <- W[10,1] <- W[10,5] <- W[10,9] <- "-s"
+W
+```
+```{}
+W = matrix(0,length(el2[,1]),length(el2[,1]))
+#diag(W) <- 1
+W[1,2] <- W[2,3] <- W[2,10] <- W[3,4] <- W[4,1] <- W[4,5] <- W[5,3] <- W[5,7] <- W[6,5] <- W[6,9] <- W[7,6] <- W[8,7] <- W[8,10] <- W[9,8] <- W[10,1] <- W[10,5] <- W[10,9] <- "-s"
+W
+```
+
+となる。
+
+この$I-W$の行列式は
+```{r}
+det(diag(rep(1,10))-W)
+```
+
+## 例４
+
+```{r}
+el <- rbind(c(1,2),c(2,3),c(3,1),c(1,4),c(4,5),c(5,6),c(6,4))
+g <- graph.edgelist(el,directed=FALSE)
+plot(g)
+```
+
+```{r}
+g.bi <- my.bigraph(g)
+plot(g.bi,edge.label=1:length(E(g.bi)),edge.curved=TRUE)
+WE <- my.WE(g.bi)
+WW <- diag(rep(1,length(WE[,1]))) - 2*WE
+WW
+```
+
+```{r}
+u <- 0.3 + 0.1*1i
+okperm.out <- my.Ihara.zeta.okperm(g,u)
+```
+```{r}
+okperm.out
+```
+```{r}
+my.Ihara.zeta.e(g,u)
+my.Ihara.zeta.poly.calc(g,u)
+```
+
+## 付録
+
+行列の列をパーミュテーションして、対角成分の積を取り、それを足し合わせて行列式の値を取ることを実践するコード。
+
+```{r}
+library(permutations)
+library(gtools)
+my.determinant <- function(M){
+	n <- length(M[,1])
+	I <- diag(rep(1,n))
+	perms <- gtools::permutations(n,n)
+	ret <- matrix(0,length(perms[,1]),n)
+	sgn <- rep(0,length(ret[,1]))
+	for(i in 1:length(ret[1,])){
+		sgn[i] <- det(I[,perms[i,]])
+		tmp.mat <- M[,perms[i,]]
+		ret[i,] <- diag(tmp.mat)
+	}
+	d <- sum(sgn * apply(ret,1,prod))
+	d2 <- det(M)
+	return(list(d =d,d2=d2,diags = ret,sgn=sgn))
+}
+
+M <- matrix(c(2,3,4,5),2,2)
+M
+my.determinant(M)
+```
+
+```{r}
+my.determinant(diag(rep(1,10))-W)
+```
+
+$$
+\zeta_G^F(s)^{-1} = \prod_{p\in [P]} (1-N_F(P)) = \det(I-Z_F)\\
+N_F(p) = z_{a_1a_2}z_{a_2a_3}...z_{a_s a_1}\\
+Z_F = \begin{pmatrix}z_{a_i a_j}\end{pmatrix}
+$$
+
+

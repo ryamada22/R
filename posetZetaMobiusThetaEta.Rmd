@@ -1,0 +1,207 @@
+---
+title: "Graph-Poset-Zeta-Mobius-Theta-Eta"
+author: "ryamada"
+date: "2018年8月28日"
+output: html_document
+---
+
+# 連結グラフ
+
+連結グラフ $G=(V,E)$を考える。
+
+$$
+G = (V,E)
+$$
+
+適当に連結グラフ$G$を作る。
+
+```{r}
+library(igraph)
+nv <- 8
+loop <- TRUE
+while(loop){
+  t <- runif(1) + 1
+  A <- matrix(runif(nv^2),nv,nv)
+  A <- A + t(A)
+  diag(A) <- 0
+  A <- matrix(A > t, nv,nv) + 0
+  g <- graph.adjacency(A,mode="undirected")
+  if(is.connected(g)){
+    loop <- FALSE
+  }
+}
+plot(g)
+```
+
+# ポセットを作る
+
+ルートノード$\rho$を選び、$G$からポセット$S_{\rho}^G = (S=V,\le)_{\rho}^G$を作成する。
+
+$\rho$からのグラフ距離$D_{\rho}$を算出。
+
+エッジの向きを$D_{\rho}$に基づいて定める。
+```{r}
+nv <- length(V(g))
+rho <- sample(1:nv,1)
+D_rho <- distances(g,v=rho)
+A_poset <- A
+for(i in 1:nv){
+  for(j in 1:nv){
+    if(D_rho[i] >= D_rho[j]){
+      A_poset[i,j] <- 0
+    }
+  }
+}
+g_poset <- graph.adjacency(A_poset)
+plot(g_poset)
+```
+
+# $\zeta$行列 $\zeta : S\times S \to \{0,1\}$
+
+```{r}
+zeta <- distances(g_poset,mode="out")
+zeta
+zeta[which(is.infinite(zeta))] <- 0
+zeta <- matrix(zeta>0,nv,nv) + 0
+zeta
+diag(zeta) <- 1
+zeta
+```
+
+関数化しておく
+
+```{r}
+my.zeta <- function(g,rho){
+  D_rho <- distances(g,v=rho)
+  A <- as.matrix(get.adjacency(g))
+  A_poset <- A
+  for(i in 1:nv){
+    for(j in 1:nv){
+      if(D_rho[i] >= D_rho[j]){
+        A_poset[i,j] <- 0
+      }
+    }
+  }
+  g_poset <- graph.adjacency(A_poset)
+  zeta <- distances(g_poset,mode="out")
+  zeta[which(is.infinite(zeta))] <- 0
+  zeta <- matrix(zeta>0,nv,nv) + 0
+  diag(zeta) <- 1
+  return(zeta)
+}
+```
+
+# $G$上の確率質量分布$P$
+
+```{r}
+library(MCMCpack)
+P <- c(rdirichlet(1,rep(1,nv)))
+P
+sum(P)
+# P <- runif(nv)
+
+```
+
+# $\theta$座標
+
+$$
+\log{P(v)} = \sum_{s \in S} \zeta(s,v) \theta(s)\\
+= \zeta_{matrix} \theta(s)
+$$
+であるから
+
+$$
+\theta(s) = \zeta_{matrix}^{-1} \log{P(v)}
+$$
+
+```{r}
+theta <- solve(zeta) %*% log(P)
+theta
+```
+
+検算
+```{r}
+log(P) - zeta %*% theta
+```
+
+# Mobius行列
+
+Mobius関数$\mu$はzeta関数の逆関数だから、Mobius行列はzeta行列の逆行列
+
+```{r}
+mobius <- solve(zeta)
+mobius
+```
+
+
+
+# $\eta$を求める
+
+$$
+P(v) = \sum_{s \in S} \mu(s,v) \eta(s)\\
+= \mu_{matrix} \theta(s)
+$$
+
+したがって
+
+$$
+\eta(s) = \mu_{matrix}^{-1} P(v)\\
+=\zeta_{matrix} P(v)
+$$
+
+```{r}
+eta <- zeta %*% P
+eta
+```
+
+検算
+
+```{r}
+mobius %*% eta - P 
+```
+
+# $\rho$を取り替えてみる
+
+$\rho$を$1,2,...,|V|$に取り替えて、それぞれの
+$\Theta,\Eta,\zeta,\mu$を算出することにする
+
+```{r}
+thetas <- etas <- zetas <- mus <- list()
+for(i in 1:nv){
+  zetas[[i]] <- my.zeta(g,i)
+  mus[[i]] <- solve(zetas[[i]])
+  #thetas[[i]] <- solve(zetas[[i]]) %*% log(P)
+  thetas[[i]] <- mus[[i]] %*% log(P)
+  etas[[i]] <- zetas[[i]] %*% P
+}
+```
+
+これにより$|V|$通りの、$\Theta,\Eta,\zeta,\mu$が生成された。
+
+$$
+\log{P(v)} = \zeta_{\rho=q} \theta_{\rho=q} = \zeta_{\rho=r} \theta_{\rho=r}\\
+P(v) = \mu_{\rho=q} \eta_{\rho=q} = \mu_{\rho=r} \eta_{\rho=r}
+$$
+が成り立つから、
+
+$\theta_q$と$\theta_r$とは線形変換。
+
+これは、$\theta,\eta$座標系がAffine変換を除いて一意に決まる、という話と通じている。
+
+検算
+
+```{r}
+thetas[[1]] - solve(zetas[[1]]) %*% zetas[[2]] %*% thetas[[2]]
+```
+```{r}
+etas[[1]] - solve(mus[[1]]) %*% mus[[3]] %*% etas[[3]]
+```
+
+このことは、グラフGにある一つのポセットSを選んで、$\theta,\eta,\zeta,\mu$を取り出して把握した「何か」は、ノード数だけバリエーションがあるが、それは表面的な違いであって、本質的な違いではないことを意味している。
+
+２つのグラフがあったときに、それぞれ、勝手にルートノードを決め、対応するポセットについて何かをしたとする。
+
+限定された線形変換で、そのポセットに対応する$\theta,\eta,\zeta,\mu$が一致させられれば、そのグラフは「同じ」で、そうできなければ、「違う」ということなわけだけれど、この「異同」を決める「限定された線形変換」って何なのでしょう？
+
+
+

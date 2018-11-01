@@ -1,0 +1,302 @@
+---
+title: "t-SNE for Sugimoto-san"
+author: "ryamada"
+date: "2018年10月21日"
+output: html_document
+---
+```{r,echo=FALSE}
+library(knitr)
+library(rgl)
+```
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+
+# t-SNE とは
+
+[この記事](https://blog.albert2005.co.jp/2015/12/02/tsne/) を参考にできるでしょう。
+
+または、記事からもリンクが張ってある[原論文](https://lvdmaaten.github.io/publications/papers/JMLR_2008.pdf)にあたるのもよいです。
+
+# Rを使ってt-SNEの処理についてなぞってみる
+
+計算機言語で処理をなぞることは、異なる言語で理解することなので、本当に解っていないとできません。
+
+逆に言うと、異なる言語(今の場合はR)で理解しようとすることで、紛れのない理解を目指せるということです。
+
+# t-SNEという名称
+
+t-分布を使った of Stochastic Neighbor Embedding 。
+
+Stochastic : 確率の→確率分布を用いた
+
+Neighbor : 近い→近いものを近くに、遠いものを遠くに
+
+Embedding : 埋め込み→高次元空間の点を低次元空間に埋め込む
+
+# 高次元空間の2点間の『距離』
+
+## ユークリッド距離
+```{r}
+# 次元
+d <- 3
+v1 <- rnorm(d)
+v2 <- rnorm(d)
+v1
+v2
+```
+
+```{r}
+library(rgl)
+plot3d(rbind(v1,v2))
+spheres3d(rbind(v1,v2),radius=0.005)
+segments3d(rbind(v1,v2),color=2)
+```
+
+2点間の距離をユークリッド距離で測ると
+
+$$
+d_{eu}(v1,v2) = \sqrt{(v1_x-v2_x)^2+(v1_y-v2_y)^2+(v1_z-v2_z)^2}
+$$
+
+```{r}
+d.eu <- sqrt(sum((v1-v2)^2))
+```
+
+## 確率分布的な遠近の程度を値にする(距離のようなもの)
+
+t-SNEの方法は2つのことを考慮します。
+
+* ある点の周りに、多次元正規分布を仮定すること
+
+* たくさんの観測点に重みをつけること
+
+今、全部でN個の点が観察されたとします。
+
+$Vi$から$Vj$への遠近の程度の値$\delta_{i \to j}$を考えます。
+
+$Vi$の周りには、$N-1$個の点が観察されているので、$N-1$個の点に、$Vi$からの遠近の値$\delta_{i \to j}$を定めることとし、
+
+その値は、
+
+$$
+\sum_{j \ne i} \delta_{i \to j} = 1
+$$
+
+となるようにします。
+
+ここで、$\delta_{i \to j}$は、$Vi$と$Vj$とのユークリッド距離が短ければ大きく、
+ユークリッド距離が長ければ小さくなるように取ることにします。
+
+$Vi$の周囲に多次元正規分布があると見ると、$Vi$からの距離が短いときに
+高確率、遠いときに低確率で点が発生するので、正規分布の確率密度関数を使って、$\delta_{i \to j}$を定めることにします。
+
+遠近関係を一番すなおな確率分布で定めることになります。
+
+正規分布の確率密度関数は
+
+
+$$
+Pr(V_j | V_i) = \frac{1}{\sqrt{2\pi \sigma^2}}e^{-\frac{||V1-V2|| ^2}{2\sigma^2}}
+$$
+
+で表されるので、
+
+$$
+\delta_{i \to j} = \frac{Pr(V_j | V_i)}{\sum_{k \ne i}Pr(V_k|V_i)}
+$$
+
+となります。
+
+ちなみに$Vi$から$Vi$の値は考慮に入れないという意味で0とします。
+
+このように計算すると、$\delta_{i \to j}$と$\delta_{j \to i}$の値は異なりますが、それは低次元空間に埋め込んで、低次元空間での「遠近」関係で考えるときに困るので、$\delta_{i \to j}$と$\delta_{j \to i}$との平均値を取ることにします。
+、
+
+$$
+\frac{\delta_{i \to j}+\delta_{j \to i}}{2}
+$$
+さらに、ちょっと工夫と加えて
+$$
+\Delta(i<->j) = \frac{1}{N}\frac{\delta_{i \to j}+\delta_{j \to i}}{2}
+$$
+とします。これにより、すべての点がこの遠近量にいくばくかの寄与はするように補正がかかるそうです。
+
+# Rでやってみる
+
+## まず、関数を作る。
+
+```{r}
+normIJ <- function(vi,vj,s=1){
+  1/sqrt(2*pi*s^2)* exp(-sqrt(sum((vi-vj)^2))/(2*s^2))
+}
+deltaMatrix <- function(Vs,s){
+  N <- length(Vs[,1])
+  m <- matrix(0,N,N)
+  for(i in 1:N){
+    for(j in 1:N){
+      if(i == j){
+        
+      }else{
+        m[i,j] <- normIJ(Vs[i,],Vs[j],s=s)
+      }
+    }
+  }
+  return(m)
+}
+deltaIJ <- function(dMat){
+  rsum <- rowSums(dMat) # 行和
+  ret <- dMat/rsum
+  return(ret)
+}
+DeltaIJ <- function(deltaIJ){
+  N <- length(deltaIJ[,1])
+  ret <- (deltaIJ + t(deltaIJ))/(2*N)
+  return(ret)
+}
+# 上の関数をまとめる
+my.DeltaIJ <- function(Vs,s){
+  dMat <- deltaMatrix(Vs,s)
+  ret1 <- deltaIJ(dMat)
+  ret2 <- DeltaIJ(ret1)
+  return(ret2)
+}
+```
+
+## データを作る
+
+```{r}
+# 次元
+d <- 3
+# クラスタの数
+n.cluster <- 3
+# クラスタごとの点の数
+Ns <- sample(100:500,n.cluster,replace=TRUE)
+# クラスタごとの点の座標
+Xs <- list()
+for(i in 1:n.cluster){
+  Xs[[i]] <- matrix(rnorm(Ns[i]*d),ncol=d)
+  # 軸ごとに平行移動して、分散を変える
+  for(j in 1:d){
+    Xs[[i]][,j] <- (Xs[[i]][,j] + rnorm(1)) * rnorm(1)
+  }
+}
+# 全点をまとめる
+Xall <- matrix(0,0,3)
+for(i in 1:n.cluster){
+  Xall <- rbind(Xall,Xs[[i]])
+}
+
+plot3d(Xall)
+```
+
+## t-SNEの遠近行列を計算してみる
+
+```{r}
+Deltamat <- my.DeltaIJ(Xall,s=1)
+image(Deltamat)
+```
+
+ユークリッド距離と比べてみる
+```{r}
+Deu <- as.matrix(dist(Xall))
+image(Deu)
+```
+
+遠近のコントラストがユークリッド距離よりもついている様子が見える
+
+# t-SNEの低次元座標化
+
+t-SNEでは、上述の遠近情報を低次元(たとえば2次元)で表そうとしている。
+
+もしも、2次元座標を使って、同様に遠近値が再現できるのならば、それが求めたい座標である。
+
+実際には、それは不可能で近似するしかない。
+
+その近似にあたって、低次元座標では、正規分布に基づく遠近情報値ではなく、以下の式で与えられる遠近情報値を使うのがt-SNE法である。
+
+この低次元用の遠近情報値の式がstudent's t-分布と呼ばれるものであるので、t-分布版SNEと称される。
+
+t-分布の特徴(の一つ)は、分布の裾が長いことである。
+
+言い換えると、正規分布よりも、遠い点が多めに観測されがちである、と言うことである。
+
+次元を下げることは、空間が狭くなることなので、狭くなる代わりに、遠いところにも点が現れることを許容しよう、ということである。
+
+低次元の座標が$y_i$であるときに
+$$
+q_{i \to j} =\frac{(1+||y_j-y_i||^2)^{-1}}{\sum_{k \ne i}(1+||y_k-y_i||^2)^{-1}}
+$$
+
+正規分布の場合と同様に、$q_{i\to j}$と$q_{j \to i}$との非対称性を平均をとることで解消することにする。
+
+$$
+t(i <-> j) = \frac{q_{i \to j} + q_{j \to i}}{2}
+$$
+
+その関数を作っておく
+
+```{r}
+tdistIJ <- function(vi,vj,s=1){
+  (1 + sum((vi-vj)^2))^(-1)
+}
+tMatrix <- function(Vs){
+  N <- length(Vs[,1])
+  m <- matrix(0,N,N)
+  for(i in 1:N){
+    for(j in 1:N){
+      if(i == j){
+        
+      }else{
+        m[i,j] <- tdistIJ(Vs[i,],Vs[j],s=s)
+      }
+    }
+  }
+  return(m)
+}
+tIJ <- deltaIJ # 行和で標準化するのは、正規分布の場合と同じ
+TIJ <- DeltaIJ # 対称化するのは、正規分布の場合と同じ
+
+# 上の関数をまとめる
+my.tIJ <- function(Vs){
+  tMat <- tMatrix(Vs)
+  ret1 <- tIJ(tMat)
+  ret2 <- TIJ(ret1)
+  return(ret2)
+}
+```
+
+たくさんの点の低次元座標を
+
+$$
+\Delta(i<->j) \sim t(i<->j)
+$$
+
+となるように近似するのは大変なので、アルゴリズムの工夫もあるので、
+以下では、
+
+Rのt-SNEパッケージに推定させて、それがt-分布版の遠近情報をうまく作り出していることを確認することとする。
+
+# Rのt-SNEパッケージ
+
+```{r}
+library(tsne)
+tsne_out = tsne(Xall)
+```
+
+```{r}
+plot(tsne_out)
+```
+低次元座標のt-分布ベースの遠近情報の計算
+
+```{r}
+tmat <- my.tIJ(tsne_out)
+image(tmat)
+```
+
+高次元空間での正規分布ベースの遠近値と、2次元空間でのt分布ベースのそれとの関係。
+
+以下に示すように今一つきれいでないのは、正規分布ベースの方の標準偏差パラメタを固定しているからではないかと思われる。
+```{r}
+plot(Deltamat, tmat)
+```

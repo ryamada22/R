@@ -1,0 +1,170 @@
+---
+title: "SPHARM"
+output: html_document
+---
+# SPHARMの係数推定をRでなぞってみる
+以下を解く。
+$$
+C = (Z^T Z)^{-1} Z^T V
+$$
+Vは頂点数ｘ３の行列で、各頂点の(x,y,z)座標。
+Zは、各頂点を単位球面にマップしたときの、球面上の点における、球面調和関数の値。行数＝頂点数、列数＝球面調和関数の数。
+Cは、推定される球面調和関数係数行列。行数＝球面調和関数の数、列数＝３。
+
+# 必要とするパッケージ
+
+```{r,echo=FALSE}
+library(Ronlyryamada)
+library(rgl)
+library(RFOC)
+library(igraph)
+library(knitr)
+library(tagcloud)
+library(e1071)
+library(sets)
+library(orthopolynom)
+library(Matrix)
+library(MASS)
+```
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+
+## $C = (Z^T Z)^{-1} Z^T V$を解くための関数
+
+```{r}
+# この関数では、thetasはz軸の角、phisはxy平面の角
+# 頂点に対応する球面調和関数の値の行列Zを作る
+# L の値は、頂点数に比して大きすぎてはだめ
+my.Z <- function(L,thetas,phis){
+  Z <- matrix(0,length(thetas),(L+1)^2)
+  cnt <- 1
+  for(i in 0:L){
+    for(j in (-i):i){
+      tmp <- sph(thetas,phis,i,j)
+      #tmp <- sph1(thetas,phis,i,j)
+      Z[,cnt] <- tmp
+      cnt <- cnt+1
+    }
+  }
+  return(Z)
+}
+
+# 球面調和関数係数推定
+# Xは頂点の(x,y,z)座標行列(3列)
+# anglesは、各頂点の球面上の角座標、angles[,1]はz軸の角、angles[,2]はxy平面の角
+
+my.spcoef.est <- function(X,angles,L){
+  Z <- my.Z(L,angles[,1],angles[,2])
+  #ret <- solve(t(Z)%*% Z)%*% t(Z) %*% X
+  ret <- ginv(Z) %*% X
+  return(ret)
+}
+# 球面調和関数係数と、単位球面極座標から(x,y,z)座標を復元
+my.coef2xyz <- function(coefs,angles){
+  L <- sqrt(length(coefs[,1]))-1
+  Z <- my.Z(L,angles[,1],angles[,2])
+  Z %*% coefs
+}
+```
+
+## 球面調和関数の扱い
+
+関数 sph() のthetaは、z軸の角度、phiはxy平面の角度
+```{r}
+# http://d.hatena.ne.jp/MikuHatsune/20160918/1474206669
+#library(orthopolynom)
+
+p_l_m <- function(l, m){ 
+  legp <- legendre.polynomials(l)[l+ 1]
+  for(mm in 1:m){
+    legp <- polynomial.derivatives(legp)
+  }
+  polynomial.coefficients(legp)[[1]]
+}
+p_l_m <- function(x, l, m){
+  legp <- legendre.polynomials(l)[l+1]
+  polynomial.values(eval(parse(text=paste0(paste(rep("polynomial.derivatives(", abs(m)), collapse=""), "legp", paste(rep(")", abs(m)), collapse=""))))[1], x)[[1]]
+}
+
+sph <- function(theta, phi, l, m){
+  x <- cos(theta)
+  y <- cos(m*phi) + 1i*sin(m*phi)
+  #Plm <- (-1)^m * (1-x^2)^(m/2)*p_l_m(x, l, m)
+  Plm <- sin(theta)^abs(m)*p_l_m(x, l, m)
+  #res <- (-1)^((m+abs(m))/2)
+  res <- (-1)^((m+abs(m))/2)*Plm*sqrt((2*l+1)/4/pi*factorial(l-abs(m))/factorial(l+abs(m)))*y
+  return(res)
+}
+
+sph1 <- function(theta, phi, l, m){
+  s <- sph(theta, phi, l, m)
+  ifelse(rep(m, length(s)) >= 0, Re(s), Im(s))
+}
+
+```
+
+## 閉曲面メッシュグラフを作成する。
+
+以下のxxx$vが３次元(x,y,z)座標。
+それに対応する球面座標がxyzで、その極座標(角)がtp。
+ただし、tp[,1]はxy平面の角度、tp[,2]はZ軸の角度
+
+```{r,webgl=TRUE}
+# 形の凹凸・複雑さをコントロールするパラメタ、n,k
+n <- 6
+k <- 5
+# メッシュのノード数をコントロールするパラメタ
+n.mesh <- 32 # 色々試すなら、32くらいにしておくのが無難。送ったhtmlファイルはn.mesh=64
+# 形を球面調和関数係数ベクトルで指定する
+A. <- matrix(runif(n^2), n, n)
+A.[1, 1] <- k
+B <- matrix(rnorm(n^2), n, n)
+# 閉曲面オブジェクトを作る
+xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+
+
+g <- graph.edgelist(xxx$edge,directed=FALSE)
+vname <- paste("",1:length(V(g)),sep="")
+g <- set_vertex_attr(g,"name",value=vname)
+# edge lengths
+w <- sqrt(apply((xxx$v[xxx$edge[,1],]-xxx$v[xxx$edge[,2],])^2,1,sum))
+
+# thetas,phis
+tmp <- my_sphere_tri_mesh(n.mesh)
+xyz <- tmp$xyz
+tosp <- TOSPHERE(xyz[, 1], xyz[, 2], xyz[, 3])
+tp <- cbind(tosp[[1]]/360 * 2 * pi, tosp[[2]]/360 * 2 * pi)
+```
+
+# やってみる
+
+係数推定
+```{r}
+L <- 15
+angles <- cbind(tp[,2],tp[,1])
+spcoef <- my.spcoef.est(xxx$v,angles ,L)
+```
+
+係数からの座標復元
+```{r}
+xyz. <- my.coef2xyz(spcoef,angles )
+```
+
+オリジナルの形の描図
+```{r,webgl=TRUE}
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+```
+復元された形の描図
+```{r,webgl=TRUE}
+open3d()
+plot3d(Re(xyz.))
+segments3d(Re(xyz.)[c(t(xxx$edge)), ])
+```
+
+復元座標の一致を確認
+```{r}
+plot(xxx$v,Re(xyz.))
+abline(0,1,col=2)
+```

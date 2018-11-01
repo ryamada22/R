@@ -1,0 +1,348 @@
+---
+title: "形の離散表現のパズルを考える"
+author: "ryamada"
+date: "2017年10月19日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# イントロダクション
+
+## S2同相多様体
+
+細胞の形のように、閉じた曲面であって、ドーナツの穴のようなものがない形を考える。
+
+滑らかな変形によって、真ん丸なボールに変形できるので、真ん丸なボール(S2と呼ぶ)とトポロジー(位相)の観点で等しいことから、S2同相な多様体と呼ぶ。
+
+以下の話はS2同相多様体にメッシュを入れて、離散的に取り扱う話である。
+
+## グラフと平面グラフ
+
+S2同相多様体Mにメッシュを入れる。
+
+メッシュの交叉点を「ノード」とし、「ノード」と「ノード」をつなぐ線分を「エッジ」と呼ぶことにする。
+
+M上のメッシュは、ノードの集合と、エッジの集合として定められる。
+
+ノードの集合とエッジの集合の組のことを「グラフ」と呼ぶ。
+
+したがって、M上のグラフを考えることができる。
+
+M上のメッシュに対応するグラフGは多角形の敷き詰めと見ることもできる。
+
+今、M上のメッシュに対応する多角形敷き詰めグラフの、一つの多角形を選び、それをぐいっと大きくしてどんどん広げていくと、それ以外の多角形はすべて、広げた一つの多角形の内側に来る。
+
+そのようにして、二次元平面にすべての点を置くと、外周が選らんだ多角形とできる。
+
+また、すべてのエッジはうまく引けば、互いに交叉することなく引ける。
+
+このように、平面上にエッジの交叉がないように描けるグラフを平面グラフと呼ぶ。
+
+M上メッシュグラフは平面グラフである。
+
+### Rでグラフ
+
+Rのグラフパッケージ igraphとRBGLとを使う。
+
+igraphパッケージはCRANから、RBGLはBioconductorから入手する。
+
+
+```{r,echo=FALSE}
+#library(igraph)
+# igraphパッケージのインストールは
+# http://igraph.org/r/ から、バイナリファイルを取ってくるほうがよさそうだ
+# RBGLパッケージとの連携関数が入っているのは、そのバージョンの模様・・・
+library(igraph)
+library(RBGL)
+library(rgl)
+library(e1071)
+```
+
+
+８面体グラフを作成する。
+```{r}
+edge.list <- matrix(c(1,2,1,3,1,4,1,5,2,3,3,4,4,5,5,2,2,6,3,6,4,6,5,6),byrow=TRUE,ncol=2)
+g <- graph.edgelist(edge.list,directed=FALSE)
+plot(g)
+```
+
+平面グラフであることを確認する。
+
+
+```{r}
+g.rbgl <- as_graphnel(g)
+g.conn <- makeBiconnectedPlanar(g.rbgl)
+g.conn
+```
+
+## グラフの隣接行列
+
+グラフはノードの集合とエッジの集合の組であった。
+
+このノードの集合とエッジの集合は、ノード数ｘノード数の行列で表現できることが知られている。
+
+ノードのペアの間にエッジが存在するときに、ノードペアに対応するセルの値を１とし、そうでないときに０としたものがグラフの隣接行列と呼ぶ。
+
+```{r}
+adj.mat <- as_adj(g)
+adj.mat
+```
+
+## ノード間の最短距離
+
+２つのノード$v_i,v_j$間の最短距離を
+
+$$
+d_{ij}
+$$
+とする。
+
+ノード間の最短距離をRで算出する。
+
+```{r}
+distances(g)
+```
+
+
+
+この最短距離は、すべてのエッジの長さを１として計算したが、エッジに長さを持たせることが出来る。
+その上でノード間最短距離を算出してみる。
+
+```{r}
+n.edge <- length(edge.list[,1])
+edge.len <- runif(n.edge)
+d <- distances(g,weight=edge.len)
+round(d,3)
+```
+
+```{r}
+allShortestPaths(d)
+```
+## 最短距離のパス(測地線)
+
+最短距離にはそれを実現する経路がある。
+
+あるノードから、すべてのノードへの最短経路を確認する。
+
+この最短経路をグラフ上の測地線と呼ぶ。
+
+```{r}
+all_shortest_paths(g,1) # 第１ノードからの最短経路
+```
+
+
+グラフには、すべてのノードペアの最短距離行列が付随しているとともに、すべてのノードペアの間の最短経路情報も付随していることを意味している。
+
+## 順序
+
+あるノードからの最短距離の大小を比較すると、すべてのノードに順序が付与できる。
+
+## 測地線上のノードの順序
+
+今、２つのノード $V_i,v_j$を取ると、その測地線は、ノードの列として表せる。
+
+それを
+$$
+P(i \rightarrow j) = (v_{s_1^{ij}},v_{s_2^{ij}},...,v_{s_{n^{ij}}})
+$$
+と書くことにする。
+ただし、$S^{ij} = (s_1,...,s_{n^{ij}})$は、ノードの添え字の列であり、$s_1=i,s_{n^{ij}}=j$である。
+
+一方、あるノード$v_k$と測地線ノード列$P(v_i \rightarrow v_j)$上のノードとの最短距離$d_{k s_t}$を考えると、
+
+最短距離の列
+$$
+DP(i \rightarrow j )^k = (d_{k,s_1},d_{k,s_2},...,d_{k,s_{n^{ij}}})
+$$
+が得られる。
+
+この$DP(i \rightarrow j)^j$が単調(単調増、もしくは単調減)であるならば、
+この測地線の折れ曲がり具合に関する質的な情報は「単調な線」であることのみであり、両端点の存在のみで十分である。
+
+他方、単調でないときには、増と減との入れ替わる点の存在は、測地線の特徴を表す情報として重要である。
+
+以下では、すべてのノードのトリオにつき、$DP(i \rightarrow j)^j$の増減の入れ替わりに相当する極となる頂点を列挙する。
+```{r}
+my.graph.feature <- function(g,w,silent=TRUE){
+  v <- V(g)
+  E(g)$weight <- w
+
+  d <- as_adjacency_matrix(g,attr="weight")
+  d <- as.matrix(d)
+  d[which(d==0)] <- NA
+  sh <- allShortestPaths(d)
+  ret <- rep(FALSE,length(v))
+  for(i in 1:(length(v)-1)){
+    if(!silent)print(i)
+    for(j in (i+1):length(v)){
+      this.sh <- extractPath(sh,i,j)
+      #print(this.sh)
+      for(k in 1:length(v)){
+        DP <- d[k,this.sh]
+        tmp <- as.numeric(sign(diff(DP)))
+        tmp2 <- diff(tmp)
+        tmp3 <- which(tmp2!=0) + 1
+        #if(length(tmp3)>0){
+        #  print(this.sh[tmp3])
+        #  print(this.sh)
+        #}
+        ret[this.sh[tmp3]] <- TRUE
+      }
+    }
+  }
+  
+  return(ret)
+}
+
+```
+```{}
+my.graph.feature <- function(g,w){
+  v <- V(g)
+  d <- distances(g,weight=w)
+  sh <- allShortestPaths(d)
+  ret <- rep(FALSE,length(v))
+  for(i in 1:(length(v)-1)){
+    for(j in (i+1):length(v)){
+      this.sh <- extractPath(sh,i,j)
+      for(k in 1:length(v)){
+        DP <- d[k,this.sh]
+        tmp <- as.numeric(sign(diff(DP)))
+        tmp2 <- diff(tmp)
+        tmp3 <- which(tmp2!=0) + 1
+        ret[tmp3] <- TRUE
+      }
+    }
+  }
+  for(i in 1:(length(v)-2)){
+    ps <- all_shortest_paths(g,i)
+    ps.tobe.eval <- rep(TRUE,length(ps[[1]]))
+    for(ii in 1:(length(ps[[1]])-1)){
+      for(iii in (ii+1):length(ps[[1]])){
+        len1 <- length(ps[[1]][[ii]])
+        len2 <- length(ps[[1]][[iii]])
+        minlen <- min(len1,len2)
+        tmpseq <- ps[[1]][[ii]][1:minlen] - ps[[1]][[iii]][1:minlen]
+        
+        if(sum(tmpseq^2)==0){
+          if(len1>len2){
+            toberemoved <- iii
+          }else{
+            toberemoved <- ii
+          }
+          ps.tobe.eval[toberemoved] <- FALSE
+        }
+      }
+    }
+    tobeeval <- which(ps.tobe.eval)
+    #for(j in (i+1):(length(v)-1)){
+    for(j in 1:length(tobeeval)){
+      #this.ps <- ps[[1]][[j]]
+      this.ps <- ps[[1]][[tobeeval[j]]]
+      for(k in (j+1):length(v)){
+        DP <- d[k,this.ps]
+        tmp <- as.numeric(sign(diff(DP)))
+        tmp2 <- diff(tmp)
+        tmp3 <- which(tmp2!=0) + 1
+        #print(c(i,j,k))
+        #print(tmp3)
+        ret[tmp3] <- TRUE
+      }
+    }
+  }
+  return(ret)
+}
+
+```
+
+# 例
+
+```{r}
+my.read.obj <- function(file){
+  object <- readOBJ(file)
+  vertex.xyz <- t(object[[1]][1:3,])
+  edges <- unique(rbind(t(object[[2]][1:2,]),t(object[[2]][2:3,]),t(object[[2]][c(3,1),])))
+  edgesLen <- sqrt(apply((vertex.xyz[edges[,1],] - vertex.xyz[edges[,2],])^2,1,sum))
+  g <- graph.edgelist(edges,directed=FALSE)
+  return(list(g=g,edge.len=edgesLen,xyz=vertex.xyz))
+}
+```
+
+```{r}
+bunny <- my.read.obj("hoge2.obj")
+open3d()
+plot3d(bunny[[3]][, 1], bunny[[3]][, 2], bunny[[3]][, 3])
+spheres3d(bunny[[3]][, 1], bunny[[3]][, 2], bunny[[3]][, 3],radius=0.01)
+```
+
+```{r}
+#d <- distances(bunny[[1]],weight=bunny[[2]])
+#ss <- allShortestPaths(d)
+```
+```{r}
+feature.pts <- my.graph.feature(bunny[[1]],bunny[[2]],silent=FALSE)
+```
+```{r}
+plot3d(bunny[[3]][, 1], bunny[[3]][, 2], bunny[[3]][, 3])
+spheres3d(bunny[[3]][, 1], bunny[[3]][, 2], bunny[[3]][, 3],radius=0.05)
+spheres3d(bunny[[3]][which(feature.pts), 1], bunny[[3]][which(feature.pts), 2], bunny[[3]][which(feature.pts), 3],radius=0.1,color="red")
+```
+
+```{r}
+geodesicsFun <- function(name="", vertexNum)
+{
+  object <- readOBJ(name)
+  vertex.xyz <- t(object[[1]][1:3,])
+  edges <- unique(rbind(t(object[[2]][1:2,]),t(object[[2]][2:3,]),t(object[[2]][c(3,1),])))
+  edgesLen <- sqrt(apply((vertex.xyz[edges[,1],] - vertex.xyz[edges[,2],])^2,1,sum))
+  distance <- distances(graph.edgelist(edges), weights=edgesLen)
+  normalizeDistance <- distance/max(distance)
+  
+  geodesicsColor <- ceiling(normalizeDistance[vertexNum,] * 15)+1
+  
+  output <- list(vertex.xyz, normalizeDistance, geodesicsColor)
+  return (output)
+}
+
+vertexNum <- 30
+
+#bunny geodesics
+bunnyRet = geodesicsFun("bunnytest.obj", vertexNum)
+
+open3d()
+plot3d(bunnyRet[[1]][, 1], bunnyRet[[1]][, 2], bunnyRet[[1]][, 3], xlab = "bunny geodesics")
+spheres3d(bunnyRet[[1]][, 1], bunnyRet[[1]][, 2], bunnyRet[[1]][, 3],radius=0.03,col=bunnyRet[[3]])
+
+#sphere geodesics
+sphereRet = geodesicsFun("spheretest.obj", vertexNum)
+
+open3d()
+plot3d(sphereRet[[1]][, 1], sphereRet[[1]][, 2], sphereRet[[1]][, 3], xlab = "sphere geodesics")
+spheres3d(sphereRet[[1]][, 1], sphereRet[[1]][, 2], sphereRet[[1]][, 3],radius=0.03,col=sphereRet[[3]])
+
+#difference
+differentGeodesics <- (bunnyRet[[2]] - sphereRet[[2]])
+differentGeodesics <- differentGeodesics + max(differentGeodesics)
+differentGeodesicsColor <- ceiling(differentGeodesics[vertexNum,] * 15)+1
+
+open3d()
+plot3d(bunnyRet[[1]][, 1], bunnyRet[[1]][, 2], bunnyRet[[1]][, 3], xlab = "bunny geodesics sphere geodesics difference")
+spheres3d(bunnyRet[[1]][, 1], bunnyRet[[1]][, 2], bunnyRet[[1]][, 3],radius=0.03,col=differentGeodesicsColor)
+
+#bunny vertex, sphere geodesics
+open3d()
+plot3d(bunnyRet[[1]][, 1], bunnyRet[[1]][, 2], bunnyRet[[1]][, 3], xlab = "bunny vertex, sphere geodesics")
+spheres3d(bunnyRet[[1]][, 1], bunnyRet[[1]][, 2], bunnyRet[[1]][, 3],radius=0.03,col=sphereRet[[3]])
+
+#sphere vertex, bunny geodesics
+open3d()
+plot3d(sphereRet[[1]][, 1], sphereRet[[1]][, 2], sphereRet[[1]][, 3], xlab = "sphere vertex, bunny geodesics")
+spheres3d(sphereRet[[1]][, 1], sphereRet[[1]][, 2], sphereRet[[1]][, 3],radius=0.03,col=bunnyRet[[3]])
+
+```

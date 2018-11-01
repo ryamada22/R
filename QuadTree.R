@@ -1,0 +1,609 @@
+library(rgl)
+library(igraph)
+library(stringr)
+# 単位立方体の面を列挙する
+my.vox.faces <- function(xyz){
+	rbind(c(xyz,1),c(xyz,2),c(xyz,3),c(xyz+c(1,0,0),2),c(xyz+c(0,1,0),3),c(xyz+c(0,0,1),1))
+}
+
+# 単位面の頂点を列挙する
+my.face.nodes <- function(xyzw){
+	xyz <- xyzw[1:3]
+	w <- xyzw[4]
+	if(w==1){
+		ret <- rbind(xyz,xyz+c(1,0,0),xyz+c(0,1,0),xyz+c(1,1,0))
+	}else if(w==2){
+		ret <- rbind(xyz,xyz+c(0,1,0),xyz+c(0,0,1),xyz+c(0,1,1))
+	}else{
+		ret <- rbind(xyz,xyz+c(0,0,1),xyz+c(1,0,0),xyz+c(1,0,1))
+	}
+	return(ret)
+}
+
+# ボクセル集合の表面を形成する面を抽出する
+# x は行列
+# 返り値はリストで、リストの第１要素は、同一行がない行か否かのboolean ベクトル
+# リストの第２要素は、同一行がない行を抽出した行列
+my.onlyone <- function(x){
+	n <- length(x[,1])
+	a <- !duplicated(x)
+	b <- !duplicated(x[n:1,])[n:1]
+	
+	return(list(a & b,x[a & b,]))
+}
+my.vox.surface <- function(Vlist){
+	faces <- matrix(0,0,4)
+	
+	for(i in 1:length(Vlist[,1])){
+		faces <- rbind(faces,my.vox.faces(Vlist[i,]))
+		
+	}
+	omoteura <- rep(c(0,0,0,1,1,1),length(faces[,1]))
+	onlyones <- my.onlyone(faces)
+	#print(onlyones[[1]])
+	return(list(onlyones[[2]],omoteura[which(onlyones[[1]])]))
+}
+
+# 表面頂点リストを作る
+my.surface.nodes <- function(faces){
+	vs <- matrix(0,0,3)
+	for(i in 1:length(faces[,1])){
+		vs <- rbind(vs,my.face.nodes(faces[i,]))
+	}
+	return(unique(vs))
+}
+
+# 表面正方形リストから表面四角メッシュのエッジリストを作る
+my.surface.graph <- function(face.nodes){
+  el <- matrix(0,0,2)
+  for(i in 1:length(face.nodes[,1])){
+    tmp <- face.nodes[i,]
+    el <- rbind(el,tmp[1:2],tmp[2:3],tmp[3:4],tmp[c(4,1)])
+  }
+	el <- t(apply(el,1,sort))
+	el <- unique(el)
+	el
+}
+
+# 単位正方形の４頂点をその順序に注意して取り出す。
+
+my.face.nodesid <- function(faces,faces.omoteura,nodes){
+	ret <- matrix(0,length(faces[,1]),4)
+	for(i in 1:length(faces[,1])){
+		nodes.xyz <- my.face.nodes(faces[i,])
+		nodes.xyz <- nodes.xyz[c(1,2,4,3),] # 反時計回り
+		if(faces[i,4]==1){
+			if(faces.omoteura[i]==0){
+				#nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}else{
+				nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}
+		}else if(faces[i,4]==2){
+			if(faces.omoteura[i]==0){
+				#nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}else{
+				nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}
+		}else{
+			if(faces.omoteura[i]==0){
+				#nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}else{
+				nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}
+		}
+		nodes.id <- rep(0,4)
+		for(j in 1:4){
+			tmp <- t(nodes) - nodes.xyz[j,]
+			tmp2 <- apply(tmp^2,2,sum)
+			nodes.id[j] <- which(tmp2==0)
+			ret[i,] <- nodes.id
+		}
+	}
+	return(ret)
+}
+
+# 四角化グラフから木を作る
+my.tree.edge <- function(vals){ # 反時計回り
+	tmp <- which(vals == max(vals))
+	if(length(tmp)==2){
+		ret <- tmp
+		#print("diagonal")
+	}else{
+		ret <- c(tmp,tmp+1)
+		if(ret[2] > 4){
+			ret[2] <- 1
+		}
+	}
+	return(ret)
+}
+
+my.select.face.edge <- function(nodeid,rootdist){
+	vals <- rootdist[nodeid]
+	tmp <- my.tree.edge(vals)
+	return(nodeid[tmp])
+}
+
+my.tree.edges <- function(face.nodes,rootdist){
+	tmp <- apply(face.nodes,1,my.select.face.edge,rootdist)
+	ret <- matrix(tmp,nrow=2)
+	return(t(ret))
+}
+
+# 描図する
+
+my.draw.surface <- function(nodes,root,edges,tree.edges=Null,axes = FALSE,radius.root = 0.1){
+	plot3d(nodes,axes=axes,xlab="x",ylab="y",zlab="z")
+	
+	
+	if(!is.null(tree.edges)){
+		tmp <- c(t(tree.edges))
+		segments3d(nodes[tmp,],col=2)
+	}
+  tmp <- c(t(edges))
+	segments3d(nodes[tmp,])
+	spheres3d(nodes[root,],col=3,radius=radius.root)
+	
+}
+### 袋状 contour を作る
+
+# まず、正方形の4頂点の並びを1,2,3,4,5,6頂点分にしたものを、全正方形についてタンデムにつないだ文字列を作る
+# その中に、エッジ連結候補が存在するかどうかで判定する
+
+my.nodes.series <- function(face.nodes){
+	tmp <- cbind(face.nodes,face.nodes[,1],face.nodes[,2])
+	ret <- paste(c(t(tmp)),collapse=" ")
+}
+
+#ttt <- my.nodes.series(tr$quad$face.nodes)
+
+# 表面四角化グラフの各ノードの周りには複数のノードがある
+# 表面を上に向けて時計回りにぐるりと(正方形の対角関係の頂点も含めて)
+# 並べることにする
+# ノードがk個の正方形で囲まれているとき、2k個の周囲ノードがある
+
+my.neighbor.nodes <- function(quad){
+	out <- list()
+	for(i in 1:length(quad$nodes[,1])){
+		f <- which(apply(quad$face.nodes - i, 1, prod) == 0)
+		tmp <- matrix(0,length(f),3)
+		for(j in 1:length(f)){
+			tmp2 <- c(quad$face.nodes[f[j],],quad$face.nodes[f[j],])
+			tmp3 <- which(tmp2 == i)[1]
+			tmp4 <- tmp2[(tmp3+1):(tmp3+3)]
+			tmp[j,] <- tmp4
+		}
+		ret <- tmp[1,]
+		nxt <- ret[length(ret)]
+		for(j in 2:length(f)){
+			tmp5 <- which(tmp[,1] == nxt)
+			ret <- c(ret,tmp[tmp5,2:3])
+			nxt <- ret[length(ret)]
+		}
+		ret <- ret[-length(ret)]
+		out[[i]] <- ret
+	}
+	return(out)
+}
+# ある集合に順序があり
+# その部分集合を全体集合に定まった順序でソートしたい
+
+my.sort.subset <- function(subset,setorder){
+	
+	#print(subset)
+	#print(setorder)
+	loc <- rep(0,length(subset))
+	for(i in 1:length(loc)){
+		#print(which(setorder==subset[i]))
+		if(length(which(setorder==subset[i]))!=1){
+			print("!!!")
+			print("subset")
+			print(subset)
+			print("setorder")
+			print(setorder)
+		}
+		loc[i] <- which(setorder==subset[i])
+	}
+	#print(loc)
+	ord <- order(loc)
+	#print(subset[ord])
+	return(subset[ord])
+}
+
+my.contour <- function(tr){
+	neighbors <- my.neighbor.nodes(tr$quad)
+	el <- tr$tree.edges
+	# 全てのエッジから双方向２本のエッジを作る
+	el2 <- rbind(el,cbind(el[,2],el[,1]))
+	ret <- matrix(0,length(el),2)
+	cnt <- 1
+	for(i in 1:length(tr$quad$nodes[,1])){
+		ins <- which(el2[,2] == i)
+		outs <- which(el2[,1] == i)
+
+		if(length(ins) !=0){
+			inouts <- unique(c(el2[ins,1],el2[outs,2]))
+			
+			nb <- neighbors[[i]]
+
+			ordered <- my.sort.subset(inouts,nb)
+
+			ordered2 <- c(ordered,ordered)
+			for(j in 1:length(ins)){
+				tmp <- el2[ins[j],1]
+				loc <- which(ordered==tmp)
+				target <- ordered2[loc+1]
+				thisout <- which(el2[,1] == i & el2[,2] == target)
+				ret[cnt,] <- c(ins[j],thisout)
+				#ret[cnt,] <- c(tmp,i)
+				#ret[cnt+1,] <- c(i,ordered2[loc+1])
+				cnt <- cnt + 1
+				
+			}
+		}
+
+		
+	}
+	ggg <- graph.edgelist(ret)
+	pt <- unlist(shortest_paths(ggg,ret[1,2],ret[1,1])[[1]])
+
+	edge.list <- el2[t(ret),]
+	return(list(contour.path = pt,contour=ret,neighbors=neighbors,edge.list=edge.list,contour.nodes= el2[pt,]))
+}
+
+# contour(袋状グラフ)をCirco表現する
+
+my.cirq <- function(x,N=1000){
+	n <- length(x)
+	theta <- (0:(n-1))/n * 2*pi
+	X <- cbind(cos(theta),sin(theta))
+	d <- as.matrix(dist(x))
+	diag(d) <- 1
+	d[lower.tri(d)] <- 1
+	duplnodes <- which(apply(d,1,prod) == 0)
+	pairs <- matrix(0,length(duplnodes),2)
+	for(i in 1:length(duplnodes)){
+		pairs[i,1] <- duplnodes[i]
+		pairs[i,2] <- which(d[duplnodes[i],] == 0)[1]
+	}
+	#pairs <- which(d==0,arr.ind=TRUE)
+	#pairs <- unique(t(apply(pairs,1,sort)))
+
+	alphas <- theta[pairs[,1]]
+	betas <- theta[pairs[,2]]
+	
+	rs <- 1/cos((betas-alphas)/2)
+	
+	ctrs <- rs * cbind(cos((alphas+betas)/2),sin((alphas+betas)/2))
+	
+	Rs <- tan((betas-alphas)/2)
+	
+	phis <- cbind(betas+pi/2, alphas+3*pi/2)
+	Theta <- (0:(N-1))/N * 2 * pi
+	#plot(cos(Theta),sin(Theta),type="l")
+	#points(X,pch=20)
+	#for(i in 1:length(pairs[,1])){
+	#	Phi <- seq(from = phis[i,1],to=phis[i,2],length=N)
+	#	arc <- Rs[i] * rbind(cos(Phi),sin(Phi)) + ctrs[i,]
+	#	points(t(arc),type="l")
+	#}
+	return(list(x=x,pairs=pairs,phis=phis,Rs=Rs,ctrs=ctrs))
+}
+
+my.cirq.plot <- function(tr,vcol=TRUE,gray=TRUE,N=1000){
+	cirq <- tr$cirq
+	n <- length(cirq$x)
+	theta <- (0:(n-1))/n * 2*pi
+	X <- cbind(cos(theta),sin(theta))
+	
+	Theta <- (0:(N-1))/N * 2 * pi
+	plot(cos(Theta),sin(Theta),type="l")
+	if(vcol){
+		col.info <- tr$rootdist[tr$cirq$x]
+		#col <- rgb(col.info/max(col.info),1-col.info/(max(col.info)),1)
+		#colcol <- heat.colors(max(col.info))
+		#points(X,pch=20,col=colcol[col.info])
+		if(gray){
+			points(X,pch=20,col=gray(col.info/max(col.info)))
+		}else{
+			col <- rgb(col.info/max(col.info),1-col.info/(max(col.info)),1)
+			colcol <- heat.colors(max(col.info))
+			points(X,pch=20,col=colcol[col.info])
+		}
+		
+	}else{
+		points(X,pch=20)
+	}
+	
+	for(i in 1:length(cirq$pairs[,1])){
+		Phi <- seq(from = cirq$phis[i,1],to=cirq$phis[i,2],length=N)
+		arc <- cirq$Rs[i] * rbind(cos(Phi),sin(Phi)) + cirq$ctrs[i,]
+		points(t(arc),type="l")
+	}
+}
+
+#my.contour(tr)
+
+my.contour.bk <- function(tr){
+	el <- tr$tree.edges
+	# 全てのエッジから双方向２本のエッジを作る
+	el2 <- rbind(el,cbind(el[,2],el[,1]))
+	st <- el2[,1]
+	end <- el2[,2]
+	# 木グラフを作る
+	# 次数1のノードに接続する
+	tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+	deg <- degree(tr.g) # 木のdegree
+	ones <- which(deg==1)
+	twos <- which(deg==2)
+	threes <- which(deg > 2)
+	e.string <- matrix(0,0,2)
+	# ones
+	for(i in 1:length(ones)){
+		end <- which(el2[,2] == ones[i])
+		st <- which(el2[,1] == ones[i])
+		e.string <- rbind(e.string,c(end,st))
+	}
+	# twos
+	for(i in 1:length(twos)){
+		ends <- which(el2[,2] == twos[i])
+		sts <- which(el2[,1] == twos[i])
+		if(el2[ends[1],1] == el2[sts[1],2]){
+			e.string <- rbind(e.string,c(ends[1],sts[2]),c(ends[2],sts[1]))
+		}else{
+			e.string <- rbind(e.string,c(ends[1],sts[1]),c(ends[2],sts[2]))
+		}
+	}
+	# threes or more
+	nodes.series <- my.nodes.series(tr$quad$face.nodes)
+	for(i in 1:length(threes)){
+		ins <- which(el2[,2] == threes[i])
+		outs <- which(el2[,1] == threes[i])
+		for(j in 1:length(ins)){
+			for(k in 1:length(outs)){
+				tmp <- c(el2[ins[j],],el2[outs[k],2])
+				tmp.str <- paste(tmp,collapse = " ")
+				if(!is.na(str_match(nodes.series,tmp.str))){
+					e.string <- rbind(e.string,c(ins[j],outs[k]))
+				}
+			}
+		}
+	}
+	# edgeの並びを整える
+	el.sort <- e.string[1,]
+	
+	el2[c(t(e.string)),]
+	return(e.string)
+}
+
+
+###########
+my.vox2quad <- function(Vox.list){
+  facesout <- my.vox.surface(Vox.list) # ボクセルリストから表面正方形を列挙
+  faces <- facesout[[1]] # 表面正方形のリスト
+  faces.omoteura <- facesout[[2]] # 表面正方形の向き情報
+  nodes <- my.surface.nodes(faces) # 表面ノードのリスト
+  face.nodes <- my.face.nodesid(faces,faces.omoteura,nodes) # 表面正方形の４頂点(向き考慮)
+  g <- graph.edgelist(my.surface.graph(face.nodes),directed=FALSE) # 表面をグラフオブジェクト化
+  edges <- t(apply(get.edgelist(g),1,sort)) # 表面エッジリスト  
+  return(list(Vox.list=Vox.list,faces=faces,faces.omoteura=faces.omoteura,nodes=nodes,g=g,edges=edges,face.nodes=face.nodes))
+}
+my.quad2tree <- function(quad,rootid){
+  shdist <- distances(quad$g) # 全頂点間のペアワイズグラフ距離を算出
+  rootdist <- shdist[rootid,] # ルートノードからのグラフ距離を抽出
+  tree.edges <- my.tree.edges(quad$face.nodes,rootdist) # 木構成エッジ
+  tmp.tr <- list(quad=quad,tree.edges=tree.edges,rootid=rootid,rootdist=rootdist,shdist=shdist)
+  ctr <- my.contour(tmp.tr)
+  cirq <- my.cirq(ctr$contour.nodes[,1])
+  return(list(quad=quad,tree.edges=tree.edges,rootid=rootid,rootdist=rootdist,shdist=shdist,contour.path=ctr$contour.path,contour=ctr$contour,neighbors=ctr$neighbors,contour.edges=ctr$edge.list,contour.nodes=ctr$contour.nodes,cirq=cirq))
+}
+
+my.draw.surface.tree <- function(tr,axes = FALSE,radius.root = 0.1){
+  plot3d(tr$quad$nodes,axes=axes,xlab="x",ylab="y",zlab="z")
+	#tmp <- c(t(tr$quad$edges))
+	#segments3d(nodes[tmp,])
+	if(!is.null(tr$tree.edges)){
+		tmp <- c(t(tr$tree.edges))
+		segments3d(tr$quad$nodes[tmp,],col=3,lwd=5)
+	}
+	tmp <- c(t(tr$quad$edges))
+	
+	spheres3d(tr$quad$nodes[tr$rootid,],col=3,radius=radius.root)
+	one.nodes <- which(tr$rootdist==1)
+  for(i in 1:length(one.nodes)){
+  	segments3d(rbind(tr$quad$nodes[tr$rootid,],tr$quad$nodes[one.nodes[i],]),col="purple")
+  }
+  segments3d(tr$quad$nodes[tmp,],col=gray(0.5))
+}
+
+
+###
+my.rectVoxel <- function(n,st = rep(0,3)){
+	ns <- rep(n,3)
+	ret <- as.matrix(expand.grid(0:ns[1],0:ns[2],0:ns[3]))
+	ret <- t(t(ret) + st)
+	ret
+}
+# 連結状況の良好化のための処理
+my.double.voxel <- function(Vox.list){
+
+	ret <- Vox.list
+	ret <- rbind(ret, t(t(Vox.list) + c(1,0,0)))
+	ret <- rbind(ret, t(t(Vox.list) + c(0,1,0)))
+	ret <- rbind(ret, t(t(Vox.list) + c(0,0,1)))
+	ret <- rbind(ret, t(t(Vox.list) + c(1,1,0)))
+	ret <- rbind(ret, t(t(Vox.list) + c(0,1,1)))
+	ret <- rbind(ret, t(t(Vox.list) + c(1,0,1)))
+	ret <- rbind(ret, t(t(Vox.list) + c(1,1,1)))
+	return(unique(ret))
+}
+Vox.list <- unique(rbind(my.rectVoxel(2),my.rectVoxel(2,c(1,1,1))))
+
+#Vox.list <- my.double.voxel(Vox.list)
+
+quad <- my.vox2quad(Vox.list)
+rootid <- 20
+tr <- my.quad2tree(quad,rootid)
+my.draw.surface.tree(tr)
+deg <- degree(tr$quad$g)
+tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+deg <- degree(tr.g) # 木のdegree
+for(i in 1:length(tr$quad$nodes[,1])){
+  # グラフ距離を適当倍して大雑把にカラースケールが現れるようにする
+  d <- floor(tr$rootdist[i] * 0.3) +1
+  #d <- deg[i]+1
+  if(i == rootid){
+		spheres3d(tr$quad$nodes[i,],col=1,radius=0.5)
+	}else{
+		spheres3d(tr$quad$nodes[i,],col=d,radius=0.05*d)
+	}
+  #print(d)
+  #spheres3d(tr$quad$nodes[i,],col=d,radius=0.05*d)
+}
+spheres3d(tr$quad$nodes[46,],col=1,radius=0.3)
+
+plot(tr.g,vertex.color=deg,layout=layout_as_tree,vertex.size=3,vertex.label="")
+e.st <- my.contour(tr)
+#cirq <- my.cirq(tr$contour.nodes[,1])
+my.cirq.plot(tr)
+
+
+#####
+v0 <- my.rectVoxel(c(10,10,0),c(-5,-5,0))
+v1 <- my.rectVoxel(c(10,0,5),c(-5,-5,0))
+v2 <- my.rectVoxel(c(0,10,5),c(-5,-5,0))
+v3 <- my.rectVoxel(c(10,0,5),c(-5,5,0))
+v4 <- my.rectVoxel(c(0,10,5),c(5,-5,0))
+
+v5 <- my.rectVoxel(c(6,0,5),c(-3,-3,0))
+v6 <- my.rectVoxel(c(0,6,5),c(-3,-3,0))
+v7 <- my.rectVoxel(c(6,0,5),c(-3,3,0))
+v8 <- my.rectVoxel(c(0,6,5),c(3,-3,0))
+
+Vox.list <- unique(rbind(v0,v1,v2,v3,v4))
+#Vox.list <- unique(rbind(v0,v1,v2,v3,v4,v5,v6,v7,v8))
+Vox.list <- my.double.voxel(Vox.list)
+
+quad <- my.vox2quad(Vox.list)
+rootid <- 100
+tr <- my.quad2tree(quad,rootid)
+my.draw.surface.tree(tr)
+deg <- degree(tr$quad$g)
+tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+deg <- degree(tr.g) # 木のdegree
+for(i in 1:length(tr$quad$nodes[,1])){
+  # グラフ距離を適当倍して大雑把にカラースケールが現れるようにする
+  #d <- floor(tr$rootdist[i] * 0.3) +1
+  d <- deg[i]+1
+  if(i == rootid){
+		spheres3d(tr$quad$nodes[i,],col=1,radius=0.5)
+	}else{
+		spheres3d(tr$quad$nodes[i,],col=d,radius=0.05*d)
+	}
+  #print(d)
+  #spheres3d(tr$quad$nodes[i,],col=d,radius=0.05*d)
+}
+
+plot(tr.g,vertex.color=deg,layout=layout_as_tree,vertex.size=3,vertex.label="")
+my.cirq(tr)
+
+######
+
+v0 <- my.rectVoxel(c(6,6,3))
+v1 <- my.rectVoxel(c(1,1,5),c(1,1,3))
+v2 <- my.rectVoxel(c(1,1,5),c(4,4,3))
+
+Vox.list <- unique(rbind(v0,v1,v2))
+quad <- my.vox2quad(Vox.list)
+rootid <- 1
+tr <- my.quad2tree(quad,rootid)
+my.draw.surface.tree(tr)
+deg <- degree(tr$quad$g)
+tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+deg <- degree(tr.g) # 木のdegree
+for(i in 1:length(tr$quad$nodes[,1])){
+  # グラフ距離を適当倍して大雑把にカラースケールが現れるようにする
+  d <- floor(tr$rootdist[i] * 1) +1
+  #d <- deg[i]+1
+  if(i == rootid){
+		spheres3d(tr$quad$nodes[i,],col=1,radius=0.5)
+	}else{
+		spheres3d(tr$quad$nodes[i,],col=d,radius=0.005*d)
+	}
+  #print(d)
+  #spheres3d(tr$quad$nodes[i,],col=d,radius=0.05*d)
+}
+
+plot(tr.g,vertex.color=tr$rootdist,palette="default",layout=layout_as_tree,vertex.size=3,vertex.label="")
+my.cirq(tr$contour.nodes[,1])
+
+###########
+n.step <- 50
+#xxx <- matrix(rep(0,3),ncol=3)
+xxx <- as.matrix(expand.grid(-1:1,-1:1,-1:1))
+for(i in 1:n.step){
+  pr <- apply(xxx^2,1,sum)
+	r <- sample(1:length(xxx[,1]),1,prob=pr+0.1)
+	#p <- sample(1:3,1)
+	tmp <- xxx[r,]
+	p <- sample(1:3,1)
+	if(runif(1)<0.5){
+	  p <- order(tmp)[2]
+	}
+	
+	tmp[p] <- tmp[p] + 1
+	xxx <- rbind(xxx,tmp)
+	xxx <- unique(xxx)
+}
+
+
+
+Vox.list <- my.double.voxel(xxx)
+Vox.list <- my.double.voxel(Vox.list)
+
+
+#Vox.list <- unique(xxx)
+quad <- my.vox2quad(Vox.list)
+rootid <- 1
+tr <- my.quad2tree(quad,rootid)
+my.draw.surface.tree(tr)
+deg <- degree(tr$quad$g)
+tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+deg <- degree(tr.g) # 木のdegree
+for(i in 1:length(tr$quad$nodes[,1])){
+  # グラフ距離を適当倍して大雑把にカラースケールが現れるようにする
+  d <- floor(tr$rootdist[i] * 0.3) +1
+  #d <- deg[i]
+  #print(d)
+  spheres3d(tr$quad$nodes[i,],col=d,radius=0.05*d)
+}
+
+plot(tr.g,vertex.color=deg[-1])
+my.cirq(tr$contour.nodes[,1])
+
+
+rootid <- 2
+tr <- my.quad2tree(quad,rootid)
+tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+
+deg.tr <- degree(tr.g)
+
+table(deg.tr)
+
+adjs <- matrix(0,length(tr$quad$node[,1]),length(tr$quad$node[,1]))
+for(i in 1:length(tr$quad$nodes[,1])){
+	deg.self <- deg[i]
+	rootid <- i
+	tr <- my.quad2tree(quad,rootid)
+	tr.g <- graph.edgelist(tr$tree.edges,directed=FALSE)
+
+	deg.tr <- degree(tr.g)
+	adj.tr <- get.adjacency(tr.g)
+	tmp <- eigen(adj.tr)[[1]]
+	adjs[i,1:length(tmp)] <- tmp
+	print(deg.self)
+	print(table(deg.tr))
+	print("---")
+}
+
+adjs1 <- adjs
+

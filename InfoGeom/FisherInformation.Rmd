@@ -1,0 +1,241 @@
+---
+title: "Fisher Information Matrix"
+author: "ryamada"
+date: "2017年2月25日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE)
+library(rgl)
+knit_hooks$set(rgl = hook_webgl)
+```
+
+
+# 尤度関数は$x$で変わる Likelihood function varies with $x$
+
+尤度関数 Likelihood function
+$$
+L(\mu,\sigma^2|X) = \prod_{i=1}^n f(x_i|\mu,\sigma^2),
+$$
+
+ただし、where,
+$$
+f(u|\mu,\sigma^2) = \frac{1}{\sqrt{2\pi \sigma^2}} e^{-\frac{(u-\mu)^2}{2\sigma^2}} .
+$$
+
+
+対数尤度関数は The log-likelihood function is;
+$$
+l(\mu,\sigma^2|X) = \log{L(\mu,\sigma^2|X)} = \sum_{i=1}^n \log{f(x_i|\mu,\sigma^2)}\\
+= -\frac{n}{2} \log{2\pi} - n\log{\sigma} - \frac{1}{2\sigma^2} \sum_{i=1}^n(x_i-\mu)^2 .
+$$
+
+
+
+## Exercise 1
+### Exercise 1-1
+$X_1={3,4,6}$,$X_2={2,4,7}$のときの$l(\mu,\sigma^2|X_1),l(\mu,\sigma^2|X_2)$, を$\mu\in [2,7]$,$\sigma \in [1,2]$ について併せて3次元プロットで描け。
+
+Draw a $l(\mu,\sigma^2|X_1),l(\mu,\sigma^2|X_2)$'s surface, where $X_1={3,4,6}$,$X_2={2,4,7}$ in 3D for $\mu\in [2,7]$,$\sigma \in (1,2)$ in the same panel.
+
+```{r,echo=FALSE}
+m <- seq(from=2,to=7,length=50)
+s <- seq(from=1,to=2,length=50)
+#s <- s[-1]
+ms <- as.matrix(expand.grid(m,s))
+M <- ms[,1]
+S <- ms[,2]
+X1 <- c(3,4,6)
+X2 <- c(3,4,7)
+lcommon <- -3/2*log(2*pi) - 3*log(S) 
+l1 <- lcommon - 1/(2*S^2) *((X1[1]-M)^2+(X1[2]-M)^2+(X1[3]-M)^2)
+l2 <- lcommon - 1/(2*S^2) *((X2[1]-M)^2+(X2[2]-M)^2+(X2[3]-M)^2)
+library(rgl)
+#plot3d(M,S,l1)
+#spheres3d(M,S,l2,radius=0.1,col=2)
+```
+# 対数尤度関数の期待値、エントロピー Expected value of log-likelihood function and entropy
+
+正規分布 $N(\mu,\sigma^2)$ があって、そこからサンプル$X =\{x_i\} \in \mathbf{R}^n$が取られることを考える。
+
+Assume a normal distribution $N(\mu,\sigma^2)$ and take a sample set $X =\{x_i\} \in \mathbf{R}^n$.
+
+
+ある特定の$(\mu,\sigma^2)$を想定しているとき、ある特定の$X =\{x_i\} \in \mathbf{R}^n$が観察される確率密度は
+
+$$
+L_p(X|\mu,\sigma^2) = \prod_{i=1}^n f(x_i|\mu,\sigma^2)
+$$
+
+色々な$X$が観測されうるが、取りうる$X$について積分すると、1。
+
+$$
+\int_X L_p(X|\mu,\sigma^2) dX = 1
+$$
+
+特定の$(\mu,\sigma^2)$であるときに、観察$X$をして、その対数尤度を調べるとする。
+
+対数尤度は$X$によって変わるが、その期待値は
+
+$$
+E(l(\mu,\sigma^2)) = \int_X L_p(X|\mu,\sigma^2)l(\mu,\sigma^2|X) dX\\
+=\int_X p(x) \log{p(x)} dX
+$$
+
+エントロピー(平均情報量)の定義
+$H(X) = -\int p(x)\log{p(x)}dx$
+の符号を入れ替えたもののことである。
+
+
+## Exercise 2
+### Exercise 2-1
+$\mu\in [2,7]$,$\sigma \in [1,2]$ について、対数尤度関数の期待値(エントロピーx(-1))を3Dプロットで示せ。
+ただし、$(\mu,\sigma)$のペアごとに、正規乱数を発生し、その対数の和をとると、尤度関数の期待値の近似値となることを理解し、その結果を用いて描図せよ。
+
+The expected value of log-likelihood function is estimated as the sum of log-likelihood of random values that are generated from the corresponding normal distribution. Estimate the expected value of log-likelihood function in that way for $\mu\in [2,7]$,$\sigma \in [1,2]$ and draw them in 3D plot.
+
+# 対数尤度関数の微分、最尤推定、スコア関数 Derivative of log-likelihood function , maximum likelihood estimate and score function
+
+対数尤度関数の期待値を扱った。今度は対数尤度関数をパラメタで偏微分したものの期待値を扱う。
+
+対数尤度関数の微分は、最尤推定値$\hat{\theta_i}$において
+0になることに利用できる。
+
+The expected value of log-likelihood function was discussed. Now the partial derivative of log-likelihood function is to be handled.
+
+The maximum likelihood estimate $\hat{\theta_i}$, makes it 0.
+
+$$
+\frac{\partial } {\partial \theta_i} l(\hat{\theta_i}) = 0
+$$
+
+この$\frac{\partial } {\partial \theta_i} l(\theta_i|X)$ という関数について考える。
+
+今、$\theta_i$の値はわからないながら、観察をしたとする。
+観察には誤差があるので、必ずしも$\frac{\partial } {\partial \theta_i} l(\hat{\theta_i}|X)$の値は0とは限らない。
+
+もし観察を繰り返したとすると、その平均値はいくつか、といえば、それは、期待値となって
+
+When repeating the sampling procedures,
+the values of function $\frac{\partial } {\partial \theta_i} l(\theta_i|X)$ is not always 0 because observations vary with random error.
+
+The sample average of the values of the function from repeated observations is the approximation of the expected value.
+
+$$
+E(\frac{\partial}{\partial \theta_i}l(\theta)) = \int_X L_p(X|\theta)\frac{\partial}{\partial \theta_i}l(\theta|X) dX
+$$
+
+と表される。
+## Exercise 3
+### Exercise 3-1
+$\mu=3,\sigma=2$のときに正規乱数を１つ観察するとする。
+その場合の対数尤度関数のパラメタの偏微分を計算する式を示せ。
+
+Assume that you take one sample from the normal distribution with $\mu=3,\sigma=2$. 
+Show the partial derivatives of log-likelihood function.
+
+### Exercise 3-2
+正規乱数を１つ観察することを多数回繰り返したとして、パラメタの偏微分の平均値がいくつになるか、シミュレーションし、その平均値、最大値、最小値を示し、ヒストグラムを示せ。
+
+Repeat the sampling many times and calculate the derivative function values.
+Answer its mean, max andmin and show their histograms.
+
+
+```{r,echo=FALSE}
+my.score <- function(x,m,s){
+  ret <- rep(0,2)
+  ret[1] <- (x-m)/s^2
+  ret[2] <- - 1/s + (x-m)^2/(s^3)
+  return(ret)
+}
+n <- 10^5
+m <- 3
+s <- 2
+r <- rnorm(n,m,s)
+sc <- matrix(0,n,2)
+for(i in 1:n){
+  sc[i,] <- my.score(r[i],m,s)
+}
+apply(sc,2,mean)
+print(range(sc[,1]))
+print(range(sc[,2]))
+#apply(sc,2,summary)
+hist(sc[,1])
+hist(sc[,2])
+
+```
+
+この対数尤度関数を(偏)微分した関数をスコア関数と言う。
+
+The (partial) derivatives of log-likelihood function is called score function.
+
+スコア関数の値が0からどれくらい離れているかをp値に結び付けた検定手法がスコア検定。
+
+Score test is a statistical test that measures the value of score function and converts the value or the deviation from 0 to p-value.
+
+
+# スコア関数の分散、フィッシャー情報量 Variance of Score function, Fisher Information
+
+スコア関数 $\frac{\partial}{\partial \theta_i} l(\theta)$ の期待値$E(\frac{\partial}{\partial \theta_i} l(\theta)) = \int_X L_p(X|\theta)\frac{\partial}{\partial \theta_i} l(\theta) dX$は0なので、
+
+スコア関数の値のばらつき(分散)は、単純に
+
+
+Variance of values of score functions is the expected value of its square because its mean is 0.
+$$
+E(\frac{\partial}{\partial \theta_i} l(\theta) \times \frac{\partial}{\partial \theta_i} l(\theta)) = \int_X L_p(X|\theta)(\frac{\partial}{\partial \theta_i} l(\theta)\times \frac{\partial}{\partial \theta_i} l(\theta)) dX
+$$
+
+異なるパラメタ$\theta_i,\theta_j$の組み合わせについても考えれば、
+
+Covariance among the derivatives of different parameters are also considered, 
+
+$$
+E(\frac{\partial}{\partial \theta_i} l(\theta) \times \frac{\partial}{\partial \theta_j} l(\theta)) = \int_X L_p(X|\theta)(\frac{\partial}{\partial \theta_i} l(\theta)\times \frac{\partial}{\partial \theta_j} l(\theta)) dX
+$$
+も併せて、正方行列が作れる。これをフィッシャー情報量と言う。
+
+These make a square matrix, called Fisher information;
+$$
+E(\frac{\partial}{\partial \theta_i}l \frac{\partial}{\partial \theta_j}l ) = \begin{pmatrix}\frac{\partial}{\partial \theta_1}l \frac{\partial}{\partial \theta_1}l ,& \frac{\partial}{\partial \theta_1}l \frac{\partial}{\partial \theta_2}l,&...,&\frac{\partial}{\partial \theta_1}l \frac{\partial}{\partial \theta_n}l\\ \frac{\partial}{\partial \theta_2}l \frac{\partial}{\partial \theta_1}l,&...,&...,&\frac{\partial}{\partial \theta_2}l \frac{\partial}{\partial \theta_n}l\\
+...,&...,&...,&...\\
+\frac{\partial}{\partial \theta_n}l \frac{\partial}{\partial \theta_1}l,&\frac{\partial}{\partial \theta_n}l \frac{\partial}{\partial \theta_2}l,&....,&\frac{\partial}{\partial \theta_n}l \frac{\partial}{\partial \theta_n}l) \end{pmatrix}
+$$
+
+フィッシャー情報量が大きいときは、スコア関数の値は0を中心にばらつきが大きくなり、フィッシャー情報量が小さいときは、スコア関数の値は0を中心にばらつきが小さくなることを示す。
+
+Regardless of Fisher information, score function takes values around 0. When Fisher information is large, score varies more and when Fisher information is small, it varies less.
+
+## Exercise 4
+### Exercise 4-1
+
+スコア関数の期待値が0であることを以下の複数の式にて確認せよ。
+
+$$
+E(\frac{\partial}{\partial \theta_i} l(\theta)) = \int_X L_p(X|\theta)\frac{\partial}{\partial \theta_i} l(\theta) dX
+$$
+
+$$
+\log{L_p(X|\theta)} = l(\theta|X)
+$$
+$$
+\frac{\partial}{\partial \theta_i} l(\theta) = \frac{\partial}{\partial \theta_i} \log{L_p(X|\theta)}\\
+=\frac{1}{L_p(X|\theta)}\frac{\partial L_p(X|\theta)}{\partial \theta_i}
+$$
+$$
+L_p(X|\theta)\frac{\partial}{\partial \theta_i} l(\theta) = L_p(X|\theta)\frac{1}{L_p(X|\theta)}\frac{\partial L_p(X|\theta)}{\partial \theta_i} \\
+=\frac{\partial L_p(X|\theta)}{\partial \theta_i}
+$$
+$$
+E(\frac{\partial}{\partial \theta_i} l(\theta)) = \int_X L_p(X|\theta)\frac{\partial}{\partial \theta_i} l(\theta) dX\\
+=\int_X \frac{\partial L_p(X|\theta)}{\partial \theta_i} dX\\
+=\frac{\partial}{\partial \theta_i}\int_X L_p(X|\theta) dX\\
+=\frac{\partial}{\partial \theta_i} \cdot 1\\
+=0
+$$

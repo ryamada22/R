@@ -1,0 +1,187 @@
+---
+title: "形空間内積表現"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+my.standardSh <- function(Sh){
+  M <- t(Sh[1:3,])
+  qrout <- qr(M)
+  Q <- qr.Q(qrout)
+  
+  Sh_s <- t(t(Q) %*% t(Sh))
+  return(list(Sh_s=Sh_s,P=Q))
+}
+
+####
+# 山田版
+####
+library(onion)
+# X1を回してX2に近づける
+my.althlooti <- function(X1,X2){
+	M <- t(X2) %*% X1
+	N <- matrix(0,4,4)
+
+	N[1,1] <- M[1,1] + M[2,2] + M[3,3]
+	N[1,2] <- M[2,3] - M[3,2]
+	N[1,3] <- M[3,1] - M[1,3]
+	N[1,4] <- M[1,2] - M[2,1]
+	N[2,1] <- N[1,2]
+	N[2,2] <- M[1,1] - M[2,2] - M[3,3]
+	N[2,3] <- M[1,2] + M[2,1]
+	N[2,4] <- M[3,1] + M[1,3]
+	N[3,1] <- N[1,3]
+	N[3,2] <- N[2,3]
+	N[3,3] <- -M[1,1] + M[2,2] - M[3,3]
+	N[3,4] <- M[2,3] + M[3,2]
+	N[4,1] <- N[1,4]
+	N[4,2] <- N[2,4]
+	N[4,3] <- N[3,4]
+	N[4,4] <- -M[1,1] - M[2,2] + M[3,3]
+	
+	eigen.out <- eigen(N)
+	q <- Re(eigen.out[[2]][,1])
+	qh <- q[1] + Hi * q[2] + Hj * q[3] + Hk * q[4]
+	Xh <- Hi * X1[,1] + Hj * X1[,2] + Hk * X1[,3]
+
+	RotX1 <- Conj(qh) * Xh * qh
+	RotX1.mat <- cbind(i(RotX1),j(RotX1),k(RotX1))
+	
+	D0 <- sqrt(sum((X1-X2)^2))
+	Dal <- sqrt(sum((RotX1.mat-X2)^2))
+	IP0 <- sum(X1*X2)
+	IPal <- sum(RotX1.mat * X2)
+	return(list(X1=X1,X2=X2,M=M, N=N, eigen.out=eigen.out,q =qh,qmat=my.q2rotmat(qh),RotX1 = RotX1.mat,D0=D0,Dal=Dal,IP0=IP0,IPal=IPal))
+}
+
+# 四元数から対応する３ｘ３回転行列に変換
+my.q2rotmat <- function(q){
+  x <- Re(q)
+  y <- i(q)
+  z <- j(q)
+  w <- k(q)
+  R <- matrix(c(x^2+y^2-z^2-w^2,2*(y*z-x*w),2*(x*z+y*w),
+                2*(x*w+y*z),x^2-y^2+z^2-w^2,2*(-x*y+z*w),
+                2*(y*w-x*z),2*(z*w+x*y),x^2-y^2-z^2+w^2),
+              byrow=TRUE,3,3)
+  return(t(R))
+  
+}
+# 単位超球面上での線形和
+# x,yは単位ベクトル
+my.vector.sum.sp <- function(x,y,p){
+  ip <- sum(x*y)
+  theta <- acos(ip)
+  newangle <- p * theta
+  cmp <- cos(newangle) + 1i * sin(newangle)
+  arg <- Arg(cmp)
+  perpen.v <- y-ip*x
+  perpen.v.st <- perpen.v/sqrt(sum(perpen.v^2))
+  #new.v.direction <- ip*x + perpen.v*tan(arg)/tan(theta)
+  new.v.direction <- cos(arg) * x + sin(arg) * perpen.v.st
+  #print(sum(new.v.direction^2))
+  z <- new.v.direction/sqrt(sum(new.v.direction^2))
+  return(list(z=z,V1=x,V2=perpen.v.st,comp1=cos(arg),comp2=sin(arg),angle=theta,newangle=newangle,ip=ip))
+}
+my.vector.sum.sp2 <- function(x,y,p){
+  ip <- sum(x*y)
+  theta <- acos(ip)
+  #newangle <- p * theta
+  newangle <- p
+  cmp <- cos(newangle) + 1i * sin(newangle)
+  arg <- Arg(cmp)
+  perpen.v <- y-ip*x
+  perpen.v.st <- perpen.v/sqrt(sum(perpen.v^2))
+  #new.v.direction <- ip*x + perpen.v*tan(arg)/tan(theta)
+  new.v.direction <- cos(arg) * x + sin(arg) * perpen.v.st
+  #print(sum(new.v.direction^2))
+  z <- new.v.direction/sqrt(sum(new.v.direction^2))
+  return(list(z=z,V1=x,V2=perpen.v.st,comp1=cos(arg),comp2=sin(arg),angle=theta,newangle=newangle,ip=ip))
+}
+```
+```{r}
+x <- rnorm(10)
+x <- x/sqrt(sum(x^2))
+y <- rnorm(10)
+y <- y/sqrt(sum(y^2))
+p <- -1
+z <- my.vector.sum.sp(x,y,p)$z
+(z+y) / x
+```
+```{r}
+ps <- seq(from=0,to=4*pi,by=0.1)
+n.iter <- length(ps)
+angles <- newangles <- ips <- rep(0,n.iter)
+qmat1 <- qmat2 <- matrix(0,n.iter,9)
+qh1 <- qh2 <- rep(0+Hi,n.iter)
+diffs <- rep(0,n.iter)
+for(i in 1:n.iter){
+k <- 20
+d <- 3
+X <- matrix(rnorm(k*d),ncol=d)
+Y <- matrix(rnorm(k*d),ncol=d)
+X <- X/sqrt(sum(X^2))
+Y <- Y/sqrt(sum(Y^2))
+al.out <- my.althlooti(Y,X)
+Y.rot <- al.out$RotX1
+#p <- runif(1)*10
+p <- ps[i]
+#p<-1
+tmp.out <- my.vector.sum.sp2(c(X),c(Y.rot),p)
+Z <- matrix(tmp.out$z,ncol=d)
+al.out2 <- my.althlooti(Z,X)
+#Matrix::rankMatrix(rbind(X,Y.rot,Z))
+#my.althlooti(Y.rot,X)$qmat
+#my.althlooti(Y.rot,Z)$qmat
+angles[i] <- tmp.out$angle
+newangles[i] <- tmp.out$newangle
+ips[i] <- tmp.out$ip
+al1 <- my.althlooti(Y.rot,X)
+al2 <- my.althlooti(Y.rot,Z)
+qmat1[i,] <- al1$qmat
+qmat2[i,] <- al2$qmat
+qh1[i] <- al1$q
+qh2[i] <- al2$q
+#Rotmat.X2Y <- al.out$qmat
+#Z1 <- t(Rotmat.X2Y %*% t(X))
+#Z2 <- t(Rotmat.X2Y %*% t(Z))
+#al.out2 <- my.althlooti(X,Z2)
+diffs[i] <- sum((tmp.out$V1 * tmp.out$comp1 + tmp.out$V2 * tmp.out$comp2 -Z)^2)
+}
+
+plot(apply(qmat2,1,mean),newangles)
+plot(diffs,newangles)
+plot(ps,Re(qh2))
+```
+```{r}
+tmp.out$V1 * tmp.out$comp1 + tmp.out$V2 * tmp.out$comp2 -Z
+```
+```{r}
+
+n <- 50
+k <- 2
+d <- 3
+R <- matrix(rnorm(n*k*d),nrow=n)
+R <- R /sqrt(apply(R^2,1,sum))
+
+D0 <- Dal <- matrix(0,n,n)
+P0 <- Pal <- matrix(1,n,n)
+
+for(i in 1:(n-1)){
+  for(j in (i+1):n){
+    tmp <- my.althlooti(matrix(R[i,],ncol=3),matrix(R[j,],ncol=3))
+    D0[i,j] <- D0[j,i] <- tmp$D0
+    Dal[i,j] <- Dal[j,i] <- tmp$Dal
+    P0[i,j] <- P0[j,i] <- tmp$IP0
+    Pal[i,j] <- Pal[j,i] <- tmp$IPal
+  }
+}
+```
+```{r}
+eigen.out0 <- eigen(P0)
+eigen.outal <- eigen(Pal)
+```

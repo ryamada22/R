@@ -1,0 +1,234 @@
+---
+title: "グラフ上の大円様集合"
+output: html_document
+---
+
+
+# 大円
+
+球の中心を通る平面が球面と交わる曲線を大円と言う。
+
+# 閉曲面にとっての大円のようなもの
+
+閉曲面には中心がないので、大円の定義を変更して、閉曲面にとっての大円様の曲線とすることにする。
+
+球における大円は、大円上の点とその対蹠点とを測地距離で結んでできる。
+特に、２つの測地距離は同一平面にある２つをペアにしたものが大円をなす。
+
+球面において、ある点にとっての対蹠点は最も遠い点である。
+また、対蹠点には複数の(無限)の測地線が引ける。
+
+閉曲面で大円様の曲線を考えるとき、
+
+『ある点$V$から、ある点$U$まで２本以上の測地線が引けて、その測地距離が、曲面のある接線方向に関して極大になっているとき、$U$を$V$の対蹠点的な点とみなすことにする。そして$V$と$U$とを結ぶ２つの測地線が作るサイクルを大円様曲線とする。ただし、大円様曲線は閉曲面を「適切に」二分するものとする』
+
+『接線方向に関して極大』という定義をすることで、鞍部にも対蹠点が取れれる。
+
+『適切に二分』とは、大円が二つの半球に分けることに対応する。複数の測地線のどれをペアにすることが大円様曲線の定義
+として最適であるかは、その用途によるように想像されるので、この定義は曖昧にしておく。
+
+# グラフにおける大円様サイクルの列挙
+
+Rを用いてグラフの大円様サイクルを列挙してみる。
+
+## Warshall-Floyd 行列
+
+測地線パスを何度も取り出すのでWarshall-Floyd行列を作っておくほうがよいかもしれないし、そうでもないかも知れない。
+
+```{r}
+library(Ronlyryamada)
+library(rgl)
+library(RFOC)
+library(igraph)
+library(knitr)
+library(tagcloud)
+library(e1071)
+
+my.WarshallFloyd <- function(g,w){
+  v <- V(g)
+  E(g)$weight <- w
+
+  d <- as_adjacency_matrix(g,attr="weight")
+  d <- as.matrix(d)
+  d[which(d==0)] <- NA
+  sh <- allShortestPaths(d)
+  return(sh)
+}
+```
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+## 閉曲面メッシュグラフを作成する。
+
+```{r,webgl=TRUE}
+# 形の凹凸・複雑さをコントロールするパラメタ、n,k
+n <- 6
+k <- 5
+# メッシュのノード数をコントロールするパラメタ
+n.mesh <- 10 # 色々試すなら、32くらいにしておくのが無難。送ったhtmlファイルはn.mesh=64
+# 形を球面調和関数係数ベクトルで指定する
+A. <- matrix(runif(n^2), n, n)
+A.[1, 1] <- k
+B <- matrix(rnorm(n^2), n, n)
+# 閉曲面オブジェクトを作る
+xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+
+g <- graph.edgelist(xxx$edge,directed=FALSE)
+# edge lengths
+w <- sqrt(apply((xxx$v[xxx$edge[,1],]-xxx$v[xxx$edge[,2],])^2,1,sum))
+
+ad <- get.adjacency(g)
+
+nv <- length(V(g))
+```
+
+## 全ノードペアの測地線パスを列挙する。
+
+```{r}
+# Warshall-Floyd行列を作ってから、パスを取り出す
+sh <- my.WarshallFloyd(g,w)
+paths <- list()
+for(i in 1:nv){
+	paths[[i]] <- list()
+}
+for(i in 1:(nv-1)){
+	for(j in (i+1):nv){
+		paths[[i]][[j]] <- extractPath(sh,i,j)
+		paths[[j]][[i]] <- paths[[i]][[j]][length(paths[[i]][[j]]):1]
+	}
+}
+```
+```{}
+paths <- list()
+for(i in 1:nv){
+	paths[[i]] <- shortest_paths(g,i)[[1]]
+}
+#for(i in 1:(nv-1)){
+	#for(j in (i+1):nv){
+		#paths[[i]][[j]] <- extractPath(sh,i,j)
+		#paths[[j]][[i]] <- paths[[i]][[j]][length(paths[[i]][[j]]):1]
+	#}
+#}
+```
+
+## 対蹠点候補ノードの列挙
+
+対蹠点は、あるノードをルートに取り、すべてのノードに対する測地線を見出したときに、極大測地線の最先端のノードが候補となる。
+
+したがって、ノードごとに全測地線を求め、全測地線のノードを集めたときに、１回しか登場しないノードがそれになる。それをtipノードと呼ぶことにする。
+
+```{r}
+tips <- list()
+
+for(i in 1:nv){
+	tmp <- unlist(paths[[i]])
+	tips[[i]] <- which(table(tmp) == 1)
+}
+```
+
+## 大円様サイクルの列挙
+
+あるルートノード$V$について、tipノードの２つ$U1,U2$がグラフ上、１辺で接続しているとき、$V$と$U1$、$V$と$U2$、$U1$と$U2$の３測地線を結んだサイクルが大円様サイクルの候補となる。
+
+$V---U1$測地線と$V---U2$測地線とを構成するノードが$V$のみを共有しているとき、途中交差の無いサイクルとなるので、これを大円様サイクルとして検出する。
+
+
+
+```{r,webgl=TRUE}
+cycles <- list() # サイクルを格納
+cycles.half1 <- cycles.half2 <- list() # サイクルを構成する２つのパスを格納
+
+cnt <- 1 # カウンタ
+for(i in 1:nv){ # ノードごとに処理
+	this.tips <- tips[[i]]
+	# tipノードペアを総当り確認
+	for(j in 1:(length(this.tips)-1)){
+		for(k in (j+1):length(this.tips)){
+		  # tipノード２つがエッジで結ばれているなら、更なる処理へ進む
+			if(ad[this.tips[j],this.tips[k]] == 1){
+			  # ２つのパスの構成ノードにルートノード以外の重複があるかどうか
+				path1 <- paths[[i]][[this.tips[j]]]
+				path2 <- paths[[i]][[this.tips[k]]]
+				# ぐるり周回するノード順でサイクル構成ノードを並べる
+				two <- c(path1,path2[length(path2):1])
+				un <- unique(two)
+				if(length(two) == length(un)+1){
+					cycles[[cnt]] <- two[-1]
+					cycles.half1[[cnt]] <- path1
+					cycles.half2[[cnt]] <- path2
+					cnt <- cnt + 1
+				}
+			}
+		}
+	}
+}
+# 周回路の長さ分布を確認
+cycle.len <- sapply(cycles,length)
+
+# 得られた周回路を図示
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+
+for(i in 1:length(cycles)){
+	el <- cbind(cycles[[i]],c(cycles[[i]][-1],cycles[[i]][1]))
+	segments3d(xxx$v[c(t(el)),],color=i,lw=4)
+}
+```
+
+## くびれた周回路(首)の検出
+
+上記で得られた周回路では、構成する半分パス上の２点間の測地線パスが周回路に含まれることは、その作成アルゴリズムから担保されている。
+
+２つの異なるパスにある２点間の測地線もすべて周回路であるような周回路は、『ひもで縛るとそこから動かせない』ので、これを、くびれ～首周回路と呼ぶことにする。
+
+２つの半パスをブリッジする全ノードペアについて、測地線パスが周回路にある場合のみを残す処理を回す。
+
+```{r,webgl=TRUE}
+kubis <- list()
+cnt <- 1
+for(i in 1:length(cycles)){
+	len1 <- length(cycles.half1[[i]])
+	len2 <- length(cycles.half2[[i]])
+	br <- FALSE
+	for(j in 2:(len1)){
+		if(br){
+			break
+		}
+		for(k in 2:(len2)){
+			tmp.path <- extractPath(sh,cycles.half1[[i]][j],cycles.half2[[i]][k])
+			if(j==len1 & k==len2){
+				br <- FALSE
+				break
+			}else{
+				if(length(tmp.path)==2){
+					br <- TRUE
+					break
+				}
+				un <- unique(c(cycles[[i]],tmp.path))
+				if(length(un) > length(cycles[[i]])){
+					br <- TRUE
+					break
+				}
+			}
+			#print(tmp.path)
+			#print(un)
+		}
+	}
+	if(!br){
+		kubis[[cnt]] <- cycles[[i]]
+		cnt <- cnt + 1
+	}
+}
+
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+
+for(i in 1:length(kubis)){
+	el <- cbind(kubis[[i]],c(kubis[[i]][-1],kubis[[i]][1]))
+	segments3d(xxx$v[c(t(el)),],color=i+1,lw=4)
+}
+```
+
+

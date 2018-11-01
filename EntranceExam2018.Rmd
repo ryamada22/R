@@ -1,0 +1,320 @@
+---
+title: "入試20180225"
+author: "ryamada"
+date: "2018年2月26日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+# 0でない実数a,b,cは次の条件(i)と(ii)を満たしながら動くものとする。
+
+(i) $1+c^2 \le 2 a$
+
+(ii) 2つの放物線 $C_1: y = ax^2$ と$C_2: y = b(x-1)^2 +c$ は接している
+
+ただし、2つの曲線が接するとは、ある共有点におおいて共通の接線をもつことであり、その共有点を接点という
+
+(1) $C_1$と$C_2$の接点の座標をaとcを用いて表せ
+
+(2) $C_1$と$C_2$の接点が動く範囲を求め、その範囲を図示せよ
+
+
+a,b,cを適当において、図を描いてみる
+
+```{r}
+# a,b,cを適当において、図を描いてみる
+
+b. <- rnorm(1) * 2
+c. <- rnorm(1) * 2
+a. <- (1+c.^2)/2 + runif(1)
+x <- seq(from=-10,to=10,length=100)
+y1 <- a. * x^2
+y2 <- b.*(x-1)^2+c.
+
+plot(x,y1,type="l",ylim=range(c(y1,y2)))
+points(x,y2,type="l",col=2)
+```
+
+共通接線を持つという条件から、$y1-y2=ax^2-(b(x-1)^2+c)=0$がx軸に接する。
+その条件をa,b,cにあてはめると、$b=-\frac{ac}{a-c)}$。
+
+接点は (\frac{c}{a},\frac{c^2}{a})
+そんなbにして描きなおす。
+
+```{r}
+b. <- -a.*c./(a.-c.)
+y2. <- b.*(x-1)^2+c.
+u <- c./a.
+v <- c.^2/a.
+plot(x,y1,type="l",ylim=range(c(y1,y2.)))
+points(x,y2.,type="l",col=2)
+points(u,v,pch=20,col=3,cex=4)
+```
+
+a,cをいろいろに変えて描く。
+
+```{r}
+c. <- seq(from=-100,to=100,length=1000)
+
+
+#plot(c./a.,c.^2/a.)
+t <- seq(from=0,to=2*pi,length=100)
+plot(cos(t),sin(t)+1,type="l")
+for(i in 1:100){
+  a. <- (1+c.^2)/2 + runif(length(c.))*100
+  points(c./a.,c.^2/a.,pch=20,cex=0.1)
+}
+
+```
+
+
+# $n^3-7n +9$ が素数になるような整数nをすべて求めよ
+
+素数を列挙する関数を使う。
+
+
+```{r}
+#install.packages("primes")
+library(primes)
+help(primes)
+generate_primes(max=100)
+is_prime(5)
+is_prime(9)
+```
+
+$y = x^3-7x +9$の曲線を描いた上で、整数について対応する値が素数かどうかを確認し、素数か否かで色を変えてプロットする
+
+```{r}
+minv <- -20
+maxv <- 20
+x <- seq(from=minv,to=maxv,length=1000)
+y <- x^3-7*x+9
+plot(x,y,type="l")
+ns <- minv:maxv
+z <- ns^3-7*ns+9
+
+TorF <- is_prime(z)
+points(ns,z,col=TorF+2,pch=20,cex=1.5)
+```
+
+# $\alpha$ は$0 < \alpha \le \frac{\pi}{2}$ を満たす定数とし、四角形ABCDに関する次の2つの条件を考える。
+
+(i) 四角形ABCDは半径1の円に内接する
+
+(ii) 角 ABC = 角 DAB = $\alpha$
+
+条件(i)と(ii)を満たす四角形のなかで、4辺の長さの積
+
+$$k = AB \cdot BC \cdot CD \cdot DA $$
+
+が最大となるものについて、kの値を求めよ
+
+A,B,C,Dの座標は
+
+$(\cos{-\theta},\sin{-\theta})$
+$(\cos{\theta},\sin{\theta})$
+$(\cos{\pi-\phi},\sin{\pi-\phi})$
+$(\cos{\pi+\phi},\sin{\pi+\phi})$
+
+ただし、$\theta > 0$, $\phi > 0$、$\pi -\phi > \theta$
+
+$\alpha = (\frac{\pi}{2} -\theta) + \frac{\theta+\phi}{2}$
+
+と表せる。
+
+$\bar{AB} = 2 \sin{\theta}$, $\bar{BC}= \bar{DA} = 2 /cos{\frac{\theta+\phi}{2}}$, $\bar{CD} = 2 \sin{\phi}$なので、
+
+$k = 2 \sin{\theta} \times (2 /cos{\frac{\theta+\phi}{2}})^2 \times 2 \sin{\phi}$
+
+
+ある$\alpha$の値について、適当に４点を取ってみる。
+
+```{r}
+alpha <- runif(1) * pi/2
+#alpha <- pi/4
+theta <- runif(1) * pi
+phi <- 2*(alpha -pi/2 + theta/2)
+
+x <- c(cos(-theta),cos(theta),cos(pi-phi),cos(pi+phi))
+y <- c(sin(-theta),sin(theta),sin(pi-phi),sin(pi+phi))
+
+t <- seq(from=0,to=2*pi,length=100)
+plot(cos(t),sin(t),type="l",asp=TRUE)
+points(x,y,pch=20,cex=2)
+
+# 角度の検算
+AB <- c(x[1]-x[2],y[1]-y[2])
+CB <- c(x[3]-x[2],y[3]-y[2])
+sum(AB*CB)/sqrt(sum(AB^2)*sum(CB^2))
+cos(alpha)
+```
+
+kの値を最大にする$\theta$を探してみる。
+
+```{r}
+
+theta <- seq(from=0,to=pi,length=100)
+phi <- 2*(alpha -pi/2 + theta/2)
+
+oks <- pi-phi > theta
+
+theta <- theta[oks]
+phi <- phi[oks]
+
+ks <- 2^4 * sin(theta) * cos((theta+phi)/2)^2 * sin(phi)
+max.k <- which(ks==max(ks))
+plot(theta/pi,ks,type="l",xlab="単位:pi",xlim=c(0,1))
+points(theta[max.k]/pi,ks[max.k],pch=20,col=2)
+ks[max.k]
+4*sin(alpha)^4 #解析的答え
+```
+
+# コインをn回投げて複素数 $z_i,z_2,...,z_n$を次のように定める
+
+(i) 1回目に表が出れば$z_1=\frac{-1+\sqrt{3} i}{2}$とし、裏が出れば、$z_1=1$とする
+
+(ii) k=2,3,...,n のとき、k回目に表が出れば$z_k0\frac{-1+\sqrt{3}i}{2}z_{k-1}$とし、裏が出れば、$z_k = \bar{z_{k-1}}$とする。ただし、$\bar{z_{k-1}}$は$z_{k-1}$の共役複素数である
+
+
+このとき、$z_n=1$となる確率を求めよ
+
+
+このコインで表が出る確率をpとして、シミュレーションする
+
+```{r}
+n <- 20
+# k回繰り返す
+k <- 100000
+p <- 0.5
+omoteUra <- matrix(sample(0:1,n*k,replace=TRUE,prob=c(p,1-p)),nrow=k)
+
+z <- matrix(0,k,n)
+a <- (-1+3^0.5* 1i)/2
+
+for(i in 1:k){
+  if(omoteUra[i,1]==0){
+    z[i,1] <- a
+  }else{
+    z[i,1] <- 1
+  }
+  for(j in 2:n){
+    if(omoteUra[i,j]==0){
+      z[i,j] <- z[i,j-1]*a
+    }else{
+      z[i,j] <- Conj(z[i,j-1])
+    }  
+  }
+}
+plot(z[1,],type="l")
+```
+
+
+
+これだとわかりにくいので、複素数の偏角の推移をプロットする。
+長いので、冒頭の100ステップのみ
+
+```{r}
+plot(Arg(z[1,1:10]),type="l")
+```
+
+k施行のうち、1の割合を調べる
+
+```{r}
+# 1との一致を調べると、計算誤差のせいでうまくカウントできないのでちょっと工夫する
+one <- (Re(z)-1)^2 < 0.0001
+frac.one <- apply(one,2,mean)
+plot(frac.one,type="l")
+points(1/3+1/6*(-1/2)^(1:n-1),col=2) # 解析的答え
+```
+
+
+# 曲線$y=\log{x}$上の点A $(t,\log{t})$における法線に、点BをAB=1となるようにとる。ただしBのx座標はtよりも大きいとする
+
+(1) 点Bの座標(u(t),v(t))を求めよ。また、$(\frac{d u}{dt},\frac{dv}{dt})$を求めよ
+
+(2) 実数rは$0 < r < 1$を満たすとし、tがrから1まで動くときに点Aと点Bが描く曲線の長さをそれぞれ$L_1(r),L_(r)$とする。このとき、極限$lim_{r \to +0} (L_1(r) - L_2(r))$を求めよ
+
+
+$(t,\log{t})$における接線の傾きは、$\frac{1}{t}$
+
+したがって、Bは$(t + \frac{\frac{1}{t}}{\sqrt{1+\frac{1}{t^2}}},\log{t} + \frac{-1}{\sqrt{1+\frac{1}{t^2}}})$
+
+```{r}
+#t <- seq(from=0,to=1,length=100)
+#t <- t[-1]
+t <- 2^seq(from=-10,to=0,length=100)
+
+
+ut <- t + (1/t)/(sqrt(1+1/t^2))
+vt <- log(t) + (-1)/sqrt(1+1/t^2)
+plot(t,log(t),type="l",xlim=range(c(t,ut)),ylim=range(c(log(t),vt)))
+points (ut,vt,type="l",col=2)
+```
+
+曲線の長さを折れ線の和とすることにする。
+
+折れ線線分ごとに長さを出し、その逆順をとり、累積和を計算してプロットする。
+
+プロットの右方向の極限が、求める答え
+
+```{r}
+L1segment <- sqrt(diff(t)^2 + diff(log(t))^2)
+L2segment <- sqrt(diff(ut)^2 + diff(vt)^2)
+
+plot(cumsum(L1segment[length(L1segment):1])-cumsum(L2segment[length(L2segment):1]),type="l")
+abline(h=pi/4,col=2) # 解
+```
+
+# 四面体 ABCDはAC=BD, AD = BCを満たすとし、辺ABの中点をP,辺CDの中点をQとする
+
+(1) 辺ABと線分PQは垂直であることを示せ
+
+(2) 線分PQを含む平面$\alpha$で四面体ABCDを切って2つの部分に分ける。このとき、2つの部分の体積は等しいことを示せ
+
+Pを原点にとり、A,Bをそれぞれ(-1,0,0),(1,0,0)とする。
+
+三角形ABDと三角形BACは３辺の長さが等しい。
+
+Cをxy平面上のy>0の半面に取る$(r\cos{\theta},r\sin{\theta},0);r>0,0 < \theta < \pi$。
+
+Dは$(-r\cos{\theta},r\sin{\theta},0);r>0,0 < \theta < \pi$
+をx軸上に回転した点であるので
+
+$(-r\cos{\theta},r\sin{\theta}\cos{\phi},r\sin{\theta}\sin{\phi})$
+
+```{r}
+P <- c(0,0,0)
+A <- c(-1,0,0)
+B <- c(1,0,0)
+r <- runif(1)*5
+theta <- runif(1)*pi
+C <- r * c(cos(theta),sin(theta),0)
+phi <- runif(1)*2*pi
+D<- c(-r*cos(theta),r*sin(theta)*cos(phi),r*sin(theta)*sin(phi))
+Q <- (C+D)/2
+
+library(rgl)
+plot3d(rbind(A,B,C,D,P,Q))
+segments3d(rbind(A,B))
+segments3d(rbind(A,D))
+segments3d(rbind(A,C))
+segments3d(rbind(B,C))
+segments3d(rbind(B,D))
+segments3d(rbind(C,D))
+segments3d(rbind(P,Q),color=2)
+```
+
+垂直を確認する
+
+```{r}
+sum((A-B)*(P-Q))
+sum((C-D)*(P-Q))
+```
+
+切断面 $\alpha$は$x=0$になっている
+```{r}
+Q
+```

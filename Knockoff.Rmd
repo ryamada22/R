@@ -1,0 +1,155 @@
+---
+title: "Knockoff"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Knockoff フィルタについて理解するための文書である。
+
+
+# 設定
+
+多数の説明変数があり、その一部が従属変数に線形影響を持ち(0でない係数を持ち)、残りの説明変数は従属変数に対して線形影響を持たない(係数が0)であるようなときに、どの従属変数が線形影響を持つのかを探索する状況を考える。
+
+# シミュレーションデータの作成
+
+```{r}
+n <- 10 # number of observations
+p <- 15 # number of variables
+k <- 7 # number of variables with nonzero coefficients
+nonzero <- sample(p,k) # nonzero variables
+amplitude <- 8 # relative signal amplitude compared with noise level = 1
+beta <- amplitude * (1:p %in% nonzero) / sqrt(n)
+# Generate the variables from a multivariate normal distribution
+## Generate a covariance matrix for the multivariate normal distribution, 
+## that is a positive definite matrix
+library(GPArotation)
+library(mvtnorm)
+R <- Random.Start(p)
+eigens <- abs(rnorm(p))*4
+pdm <- R %*% diag(eigens) %*% t(R)
+## Generate the variables with means = 0
+X <- rmvnorm(n,mean=rep(0,p),sigma=pdm)
+# sampleing function
+y.sample <- function(X,beta){
+  X %*% beta + rnorm(length(X[,1]))
+}
+y <- y.sample(X,beta)
+```
+
+作成したデータの共分散行列を確認してみるには以下のようにする(大きいnで実施する)。
+
+```{r}
+# cov(X) -pdm
+```
+
+# Knockoff filterを使ってみる
+
+```{r}
+library(knockoff)
+result <- knockoff.filter(X,y)
+print(result)
+```
+
+真の変数のうち選択されたもの、
+選択されたうち真であるものをそれぞれ確認する。
+
+True Positive Rate, Positive Predictive Valueに相当する。
+
+
+
+```{r}
+result$selected %in% nonzero
+nonzero %in% result$selected
+```
+
+False discovery probability はPPVの裏側の指標。
+
+```{r}
+fdp <- function(selected,nonzero){
+  sum(!(selected %in% nonzero))/max(1,length(selected))
+}
+fdp(result$selected,nonzero)
+```
+
+```{r}
+gk <- function(X)create.gaussian(X,rep(0,p),pdm)
+```
+```{r}
+gk
+```
+```{r}
+X. <- result$Xk
+XX. <- cbind(X,X.)
+image(t(XX.) %*% XX.)
+
+```
+
+```{r}
+image((t(X)%*% X) - (t(X.)%*%X.))
+```
+
+```{r}
+#str(result)
+t(result$X) %*% result$X - (t(result$Xk) %*% result$Xk)
+```
+
+```{r}
+p=200; n=100; k=15
+rho = 0.4
+mu = rep(0,p); Sigma = toeplitz(rho^(0:(p-1)))
+X = matrix(rnorm(n*p),n) %*% chol(Sigma)
+nonzero = sample(p, k)
+beta = 3.5 * (1:p %in% nonzero)
+y = X %*% beta + rnorm(n)
+
+# Basic usage with default arguments
+knockoffs = function(X) create.gaussian(X, mu, Sigma)
+result = knockoff.filter(X, y, knockoffs=knockoffs)
+print(result$selected)
+
+# Advanced usage with custom arguments
+knockoffs = function(X) create.gaussian(X, mu, Sigma, method='equi')
+result = knockoff.filter(X, y, knockoffs=knockoffs)
+print(result$selected)
+```
+
+```{r}
+dim(result$X)
+dim(result$Xk)
+```
+```{r}
+image(t(result$X) %*% result$X - (t(result$X) %*% result$Xk))
+range(t(result$X) %*% result$X - (t(result$X) %*% result$Xk))
+```
+```{r}
+dim(t(X) %*% X)
+```
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
