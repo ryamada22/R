@@ -1,0 +1,296 @@
+---
+title: "閉曲面グラフのくびれ構造"
+output: html_document
+---
+
+
+
+```{r}
+library(Ronlyryamada)
+library(rgl)
+library(RFOC)
+library(igraph)
+library(knitr)
+library(tagcloud)
+library(e1071)
+library(sets)
+
+```
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+
+
+
+```{r}
+# グラフ上の頂点間最短距離を算出するためのWarshall-Floyd 行列を作成する
+my.WarshallFloyd <- function(g,w){
+  v <- V(g)
+  E(g)$weight <- w
+
+  d <- as_adjacency_matrix(g,attr="weight")
+  d <- as.matrix(d)
+  d[which(d==0)] <- NA
+  sh <- allShortestPaths(d)
+  return(sh)
+}
+# すべての頂点ペア間の最短パスのノード列を格納したリストを返す
+my.all.paths <- function(sh){
+  nv <- length(sh[[1]][,1])
+  paths <- list()
+  for(i in 1:nv){
+	  paths[[i]] <- list()
+  }
+  for(i in 1:(nv-1)){
+	  for(j in (i+1):nv){
+	  	paths[[i]][[j]] <- extractPath(sh,i,j)
+	  	paths[[j]][[i]] <- paths[[i]][[j]][length(paths[[i]][[j]]):1]
+	  }
+  }
+  return(paths)
+}
+# 各ノードのパスの極大をもたらす頂点を格納
+# 各ノードからの最短パスに登場する回数が１回のみのノードはそのようなパス極大の到着ノードであることを利用する
+my.tips <- function(paths){
+  tips <- list()
+  nv <- length(paths)
+  for(i in 1:nv){
+	  tmp <- unlist(paths[[i]])
+	  tips[[i]] <- which(table(tmp) == 1)
+  }
+  return(tips)
+}
+# 各ノードの極大パス頂点のペアのうち、オリジナルのグラフにおいてエッジで結ばれているペアを全列挙する
+# そのような２つの極大パスをつないだものが、適切なサイクル候補となる
+my.tip.pairs <- function(tips,ad){
+  tip.pairs <- list()
+  ad.half <- as.matrix(ad)
+  ad.half[upper.tri(ad.half)] <- 0
+  diag(ad.half) <- 0
+  nv <- length(tips)
+  for(i in 1:nv){
+    add <- ad.half[tips[[i]],tips[[i]]]
+    tmp <- which(add==1,arr.ind=TRUE)
+    tip.pairs[[i]] <- cbind(tips[[i]][tmp[,1]],tips[[i]][tmp[,2]])
+  }
+  return(tip.pairs)
+}
+# 極大パス２つをつないでできるサイクルを列挙する
+# またそのようなサイクルが、オリジナルのサイクルを２領域に分けるが
+# ２領域のいずれもが１個以上の頂点をもつものとする。
+my.cycles <- function(g,tip.pairs,paths){
+  cycles <- list() # サイクルを格納
+  cycles.half1 <- cycles.half2 <- list() # サイクルを構成する２つのパスを格納
+  nv <- length(tip.pairs)
+  cnt <- 1 # カウンタ
+
+  for(i in 1:nv){
+    for(j in 1:length(tip.pairs[[i]][,1])){
+      path1 <- paths[[i]][[tip.pairs[[i]][j,1]]]
+  		path2 <- paths[[i]][[tip.pairs[[i]][j,2]]]
+  		path1. <- path1[c(-1,-length(path1))]
+  		path2. <- path2[c(-1,-length(path2))]
+  		tmpout <- prod(outer(path1.,path2.,"-"))
+  		if(tmpout != 0){
+  		  two <- c(path1,path2[length(path2):1])
+  		  tmp2 <- two[-1]
+  		  tmp3 <- groups(components(delete_vertices(g,vertex_attr(g)$name[tmp2])))
+  		  if(length(tmp3)>1){
+  		    cycles[[cnt]] <- tmp2
+  			  cycles.half1[[cnt]] <- path1
+  			  cycles.half2[[cnt]] <- path2
+  			  cnt <- cnt + 1
+  		  }
+  		}
+    }
+  }
+  return(list(cycles=cycles,cycles.half1=cycles.half1,cycles.half2=cycles.half2))
+}
+# 極大パスのペアでできるサイクルのうち、
+# サイクル上のどの２点間の最短距離もサイクル上であるもののみを取り出す
+
+my.kubis <- function(g,cycles.out,paths){
+  cycles <- cycles.out[[1]]
+  cycles.half1 <- cycles.out[[2]]
+  cycles.half2 <- cycles.out[[3]]
+  kubis <- list()
+  cnt <- 1
+  
+  for(i in 1:length(cycles)){
+    #print("cycle id")
+    #print(i)
+  	len1 <- length(cycles.half1[[i]])
+  	len2 <- length(cycles.half2[[i]])
+  	br <- FALSE
+  	for(j in 2:(len1)){
+  		if(br){
+  			break
+  		}
+  		for(k in 2:(len2)){
+  			#tmp.path <- extractPath(sh,cycles.half1[[i]][j],cycles.half2[[i]][k])
+  		  tmp.path <- paths[[cycles.half1[[i]][j]]][[cycles.half2[[i]][k]]]
+  			if(j==len1 & k==len2){
+  				br <- FALSE
+  				#print("last pair break")
+  				break
+  			}else{
+  				if(length(tmp.path)==2){
+  					br <- TRUE
+  					#print("len=2 break")
+  					break
+  				}
+  				un <- unique(c(cycles[[i]],tmp.path))
+  				if(length(un) > length(cycles[[i]])){
+  					br <- TRUE
+  					#print("shortcut break")
+  					break
+  				}
+  			}
+  			#print(tmp.path)
+  			#print(un)
+  		}
+  	}
+  	if(!br){
+  		kubis[[cnt]] <- cycles[[i]]
+  		cnt <- cnt + 1
+  	}
+  }
+  if(length(kubis)==0){
+    return(list(kubi=list(),kubi.halves=list()))
+  }
+  #kubi.unique <- unique(lapply(kubis,sort))
+  dups <- duplicated(lapply(kubis,sort))
+  #print(dups)
+  kubi.unique <- list()
+  cntt <- 1
+  for(i in 1:length(dups)){
+    if(!dups[i]){
+      kubi.unique[[cntt]] <- kubis[[i]]
+      cntt <- cntt+1
+    }
+  }
+
+  
+  kubi.halves <- lapply(kubi.unique,function(k){groups(components(delete_vertices(g,vertex_attr(g)$name[k])))})
+  #tmp.len <- sapply(kubi.halves,length)
+  #noOne <- which(tmp.len>1)
+  #retkubi <- ret.kubi.halves <- list()
+  #if(length(noOne)>0){
+  #  for(i in 1:length(noOne)){
+  #    retkubi[[i]] <- kubi.unique[[noOne[i]]]
+  #    ret.kubi.halves[[i]] <- kubi.halves[[noOne[i]]]
+  #  }
+  #}
+  
+  #return(list(kubi=retkubi,kubi.halves=ret.kubi.halves))
+  return(list(kubi=kubi.unique,kubi.halves=kubi.halves))
+}
+my.kubi.structure <- function(kubi,kubi.halves){
+  #.sets <- lapply(kubi.halves,as.set)
+  #kubi.sets <- lapply(kubi,as.set)
+  if(length(kubi)==0){
+    return(list(ad=c(),v.sets=list()))
+  }
+  V.sets <- list()
+  for(i in 1:length(kubi)){
+    V.sets[[i]] <- list()
+    V.sets[[i]][[1]] <- set_union(as.set(kubi.halves[[i]][[1]]),as.set(paste("",kubi[[i]],sep="")))
+    V.sets[[i]][[2]] <- set_union(as.set(kubi.halves[[i]][[2]]),as.set(paste("",kubi[[i]],sep="")))
+  }
+  d <- matrix(0,2*length(V.sets),2*length(V.sets))
+  cnt1 <- cnt2 <- 0
+  for(i1 in 1:length(V.sets)){
+    for(i2 in 1:2){
+      cnt1 <- cnt1 + 1
+      cnt2 <- 0
+      for(j1 in 1:length(V.sets)){
+        for(j2 in 1:2){
+          cnt2 <- cnt2 + 1
+          if(V.sets[[i1]][[i2]] < V.sets[[j1]][[j2]]){
+            d[cnt1,cnt2] <- 1
+          }
+        }
+      }
+    }
+  }
+  
+  return(list(ad=d,v.sets=V.sets))
+}
+my.kubiGraph <- function(g,w){
+  sh <- my.WarshallFloyd(g,w)
+  paths <- my.all.paths(sh)
+  tips <- my.tips(paths)
+  ad <- get.adjacency(g)
+  tip.pairs <- my.tip.pairs(tips,ad)
+  cycles.out <- my.cycles(g,tip.pairs,paths)
+  kubis <- my.kubis(g,cycles.out,paths)
+  kubi.graph <- my.kubi.structure(kubis$kubi,kubis$kubi.halves)
+  
+  return(list(kubis=kubis,kubi.graph=kubi.graph))
+}
+
+```
+
+
+
+## 閉曲面メッシュグラフを作成する。
+
+```{r,webgl=TRUE}
+# 形の凹凸・複雑さをコントロールするパラメタ、n,k
+n <- 6
+k <- 5
+# メッシュのノード数をコントロールするパラメタ
+n.mesh <- 10 # 色々試すなら、32くらいにしておくのが無難。送ったhtmlファイルはn.mesh=64
+# 形を球面調和関数係数ベクトルで指定する
+A. <- matrix(runif(n^2), n, n)
+A.[1, 1] <- k
+B <- matrix(rnorm(n^2), n, n)
+# 閉曲面オブジェクトを作る
+xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+
+g <- graph.edgelist(xxx$edge,directed=FALSE)
+vname <- paste("",1:length(V(g)),sep="")
+g <- set_vertex_attr(g,"name",value=vname)
+# edge lengths
+w <- sqrt(apply((xxx$v[xxx$edge[,1],]-xxx$v[xxx$edge[,2],])^2,1,sum))
+```
+```{r}
+sh <- my.WarshallFloyd(g,w)
+paths <- my.all.paths(sh)
+tips <- my.tips(paths)
+ad <- get.adjacency(g)
+tip.pairs <- my.tip.pairs(tips,ad)
+cycles.out <- my.cycles(g,tip.pairs,paths)
+cycles <- cycles.out[[1]]
+el <- matrix(0,0,2)
+for(i in 1:length(cycles)){
+  tmp <- cycles[[i]]
+  el <- rbind(el,cbind(tmp[-length(tmp)],tmp[-1]))
+}
+el <- unique(el)
+gg <- graph.edgelist(el,directed=FALSE)
+```
+# 首解析
+
+```{r}
+kubiout <- my.kubiGraph(g,w)
+```
+```{r}
+kubiG <- graph.adjacency(kubiout$kubi.graph$ad)
+plot(kubiG)
+kubi.unique <- kubiout$kubis$kubi
+print(length(kubi.unique))
+```
+```{r,webgl=TRUE}
+
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+if(length(kubi.unique)>0){
+  for(i in 1:length(kubi.unique)){
+	  el <- cbind(kubi.unique[[i]],c(kubi.unique[[i]][-1],kubi.unique[[i]][1]))
+	  segments3d(xxx$v[c(t(el)),],color=i+1,lw=4)
+  }
+}
+```

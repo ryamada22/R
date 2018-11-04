@@ -1,0 +1,43 @@
+## 以下を実行してください
+## Update all/some/none? [a/s/n] は常にnで結構です
+
+source("https://bioconductor.org/biocLite.R")
+biocLite("BiocParallel")
+biocLite("BiocStyle")
+biocLite("destiny")
+biocLite("dynamicTreeCut")
+biocLite("edgeR")
+biocLite("gplots")
+biocLite("knitr")
+biocLite("limma")
+biocLite("mvoutlier")
+biocLite("org.Mm.eg.db")
+biocLite("R.utils")
+biocLite("RBGL")
+biocLite("readxl")
+biocLite("Rtsne")
+biocLite("scater")
+biocLite("scran")
+biocLite("TxDb.Mmusculus.UCSC.mm10.ensGene")
+biocLite("GenomicFeatures")
+
+# 読み込みの確認をします
+# エラーなく読み込めればOKです
+
+library(BiocParallel)
+library(BiocStyle)
+library(destiny)
+library(dynamicTreeCut)
+library(edgeR)
+library(gplots)
+library(knitr)
+library(limma)
+library(mvoutlier)
+library(org.Mm.eg.db)
+library(R.utils)
+library(RBGL)
+library(readxl)
+library(Rtsne)
+library(scater)
+library(scran)
+library(TxDb.Mmusculus.UCSC.mm10.ensGene)

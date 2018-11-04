@@ -1,0 +1,119 @@
+---
+title: "Untitled"
+author: "ryamada"
+date: "2018年10月18日"
+output: html_document
+---
+# 初日
+
+```{r}
+# サンプル数が100
+n <- 10^3
+# 平均 120
+m <- 120
+# 標準偏差
+s <- 10
+# 正規乱数 random values in normal distribution
+R <- rnorm(n,m,s)
+
+```
+
+```{r}
+n
+```
+
+```{r}
+str(R)
+```
+```{r}
+1:4
+3:8
+1:(-3)
+```
+
+$$
+X = \frac{3}{5}
+$$
+
+```{r}
+plot(R)
+```
+
+```{r}
+sum(c(1,1))
+sum(1:100)
+sum(R)
+```
+
+```{r}
+120 * 100 - sum(R)
+```
+```{r}
+# mean
+av <- sum(R)/n
+```
+```{r}
+2^(1/2)
+```
+```{r}
+sqrt(2)
+```
+```{r}
+dif <- R - av
+sqrt(sum(dif^2)/n)
+```
+
+```{r}
+mean(R)
+sd(R)
+summary(R)
+```
+
+```{r}
+sorted.R <- sort(R)
+plot(sorted.R)
+```
+
+```{r}
+a <- n/2
+b <- a+1
+sorted.R[a]
+sorted.R[b]
+(sorted.R[a]+sorted.R[b])/2
+summary(R)
+```
+
+```{r}
+medn <- 0
+if((n %% 2 ) == 0){ 
+  a <- n/2
+  b <- a+1
+  medn <- (sorted.R[a]+sorted.R[b])/2
+}else{
+  a <- (n+1)/2
+  medn <- sorted.R[a]
+}
+medn
+```
+
+```{r}
+hist(R)
+```
+```{r}
+boxplot(R)
+sm <- summary(R)
+abline(h=sm[2],col=2)
+abline(h=sm[5],col="blue")
+abline(h=sm[1],col="green")
+abline(h=sm[3],col="orange")
+abline(h=sm[4],col="purple")
+abline(h=sm[6],col="pink")
+```
+
+```{r}
+boxplot(R)
+sm <- summary(R)
+n.elem <- length(sm) # sm の要素数
+# 1:n.elem は1,2,....,6、それに1を加えて、2,3,...,7
+abline(h=sm,col=(1:n.elem)+1)
+```

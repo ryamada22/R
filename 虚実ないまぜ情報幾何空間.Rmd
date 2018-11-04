@@ -1,0 +1,174 @@
+---
+title: "虚数軸を持つ情報幾何空間"
+author: "ryamada"
+date: "2018年4月22日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 指数型分布族
+
+$$
+\log{P(x|\theta)} = C(x) + \sum_{i=1} F_i(x) \theta_i - \psi(\theta)
+$$
+# 関数の内積
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int P_1(x|\theta_1)P_2(x|\theta_2)dx
+$$
+
+# 指数型分布族の内積
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int P_1(x|\theta_1)P_2(x|\theta_2)dx
+$$
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int e^{\sum_{i=0} F_i(x) \theta_{1,i} - \psi(\theta_1)}e^{\sum_{i=0} F_i(x) \theta_{2,i} - \psi(\theta_2)}dx
+$$
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \int e^{\sum_{i=0} F_i(x) (\theta_{1,i}+\theta_{2,i})  - (\psi(\theta_1) + \psi(\theta_2))}dx
+$$
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) (\theta_{1,i}+\theta_{2,i})}dx
+$$
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i}}dx
+$$
+ただし $\theta_1 + \theta_2 = \theta_{1+2}$.
+
+以下に注意すると
+$$
+\int P(x|\theta_1) dx = \int e^{\sum_{i=0} F_i(x) \theta_{i} - \psi(\theta)} dx = 1\\
+\int e^{\sum_{i=0} F_i(x) \theta_{i}} dx  = e^{\psi(\theta)}
+$$
+
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x)\theta_{1+2,i}}dx
+$$
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i} - \psi(\theta_{1+2})}e^{\psi(\theta_{1+2})}dx
+$$
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{e^{\psi(\theta_{1+2})}}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i} - \psi(\theta_{1+2})}dx
+$$
+$$
+<P_1(x|\theta_1),P_2(x|\theta_2)> = \frac{e^{\psi(\theta_{1+2})}}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}}
+$$
+ここで、指数型分布族のポテンシャル関数 $\psi(\theta)$を天下り式に次のように取ることにする。
+
+$$
+\psi(\theta) = <\theta,\theta> = \sum_i \theta_i^2
+$$
+そうすると
+$$
+\log{(<P_1(x|\theta_1),P_2(x|\theta_2)>)} = 2 <\theta_1,\theta_2>
+$$
+となる。
+
+この空間での関数間の距離(ダイバージェンス)を
+$$
+<\theta_1-\theta_2,\theta_1-\theta_2> = <\theta_1,\theta_1> + <\theta_2,\theta_2> - 2 <\theta_1,\theta_2>
+$$
+とすることで、この空間における分布間の『距離・ダイバージェンス』も定義できる。
+
+# 標本から関数内積を推定する
+
+標本から関数内積を推定することにすると、このポテンシャル関数条件での$\theta$座標系の内積の推定値が得られることになる。
+
+ただし、以下の例で示すように、この$\theta$座標系の内積・距離は素直なものではない。
+
+純実数の軸と、純虚数の軸とで張られることになる。
+
+純実数の軸においては、値の差が大きければ距離が大きくなり、純虚数の軸では、値の差が小さいほど、距離が大きくなる。
+
+そんな変な空間である。
+
+# やってみよう
+
+```{r}
+n <- 10 # 分布の数
+d <- 5 # 項数
+library(MCMCpack)
+P <- rdirichlet(n,rep(0.6,d)) 
+
+# log ( 函数内積) / 2 が\theta座標内積であるので、それをペアワイズに求める
+H <- log(P %*% t(P)) /2
+
+# 固有値分解する
+eigen.out <- eigen(H)
+# 正定値ではない
+plot(eigen.out[[1]])
+# このままではうまくないが、むりやり、H = Theta %*% t(Theta) と分解することにする
+# 固有ベクトルを並べた行列を複素数行列オブジェクトにする
+V <- eigen.out[[2]] + 0*1i
+# 固有値の平方根を対角成分にする行列
+S <- diag((eigen.out[[1]] + 0*1i)^0.5)
+# theta座標を各標本分布に与える
+Theta <- V %*% S
+# Theta は実・虚混合の座標
+print(Theta)
+```
+```{r}
+# H = Theta %*% t(Theta)の検算
+range(Re(Theta%*% t(Theta) -H))
+range(Im(Theta%*% t(Theta) -H))
+```
+
+
+分布型標本にTheta という座標を与えることができた
+
+この座標は一部の軸が実数で
+
+一部の軸が虚数である
+
+実数軸の成分は、値の差が大きいほど、分布間距離は大きく
+
+虚数軸の成分は、値の差が小さいほど、分布間距離は大きい
+
+$log(P) = C(x) + Theta F - \Psi(Theta)$のC,Fを求めたい
+
+
+```{r}
+logP <- log(P)
+Psi <- diag(H)
+
+# C(x):定数項の分をFに組み込むべく、Thetaに1列加える
+ThetaC <- cbind(Theta,rep(1,n))
+# log(P) = ThetaC %*% F. - \Psi(Theta)
+# Fの最下行がC(x)に相当する行
+
+# logP. = log(P) + \Psi(Theta) 
+logP. <- logP + Psi
+
+# logP. = ThetaC F.
+# 一般化逆行列を使って解く
+
+F. <- ginv(ThetaC) %*% logP.
+
+# 検算
+range(Mod(logP. - ThetaC %*% F.))
+
+F <- F.[1:(length(F.[,1])-1),]
+C <- F.[length(F.[,1]),]
+
+# 検算２
+
+logP.calc <- matrix(rep(C,n),nrow=n,byrow=TRUE) + Theta %*% F - Psi
+range(Re(logP.calc))
+range(Im(logP.calc)) # 虚部はない
+# 一致する
+range(Mod(logP - logP.calc))
+```
+
+
+
+
+
+
+
+
+

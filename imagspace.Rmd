@@ -1,0 +1,138 @@
+---
+title: "虚数軸のある空間"
+author: "ryamada"
+date: "2018年11月3日"
+output: html_document
+---
+## 実軸１つ、虚軸１
+$$
+d(\theta_1,\theta_2)^2 = (\theta_1(1)-\theta_2(1))^2 - (\theta_1(2)-\theta_2(2))^2
+$$
+```{r}
+x <- y <- seq(from=0,to=1,length=100)
+xy <- as.matrix(expand.grid(x,y))
+n.iter <- 100
+m <- matrix(0,2+n.iter,2)
+lambdas <- c(1,-1)
+for(i in 1:n.iter){
+  ds <- matrix(0,length(xy[,1]),1+i)
+  for(j in 1:(1+i)){
+    tmp <- t(xy) - m[j,]
+    tmp2 <- apply(tmp^2 * lambdas,2,sum)
+    ds[,j] <- tmp2
+  }
+  tobeselected <- which(apply(ds,1,function(x){all(x>=0)}))
+  s <- sample(tobeselected,1)
+  m[i+2,] <- xy[s,]
+  xy <- xy[tobeselected,]
+}
+```
+```{r}
+plot(m)
+ord <- order(m[,1])
+m.ord <- m[ord,]
+ddss <- matrix(0,length(m.ord[,1]),length(m.ord[,1]))
+for(i in 1:length(m.ord[,1])){
+  for(j in 1:length(m.ord[,1])){
+    ddss[i,j] <- (m.ord[i,1]-m.ord[j,1])^2 + (m.ord[i,2]-m.ord[j,2])^2
+  }
+}
+image(ddss)
+```
+```{r}
+x <- y <- z <- seq(from=0,to=1,length=60)
+xyz <- as.matrix(expand.grid(x,y,z))
+n.iter <- 100
+m <- matrix(0,2+n.iter,3)
+lambdas <- c(1,-1,-1)
+for(i in 1:n.iter){
+  ds <- matrix(0,length(xyz[,1]),1+i)
+  for(j in 1:(1+i)){
+    tmp <- t(xyz) - m[j,]
+    tmp2 <- apply(tmp^2 * lambdas,2,sum)
+    ds[,j] <- tmp2
+  }
+  tobeselected <- which(apply(ds,1,function(x){all(x>=0)}))
+  s <- sample(tobeselected,1)
+  m[i+2,] <- xyz[s,]
+  xyz <- xyz[tobeselected,]
+}
+```
+```{r}
+library(rgl)
+plot3d(m)
+ord <- order(sum(m[,1]^2+m[,2]^2))
+m.ord <- m[ord,]
+ddss <- matrix(0,length(m.ord[,1]),length(m.ord[,1]))
+for(i in 1:length(m.ord[,1])){
+  for(j in 1:length(m.ord[,1])){
+    ddss[i,j] <- (m.ord[i,1]-m.ord[j,1])^2 + (m.ord[i,2]-m.ord[j,2])^2
+  }
+}
+image(ddss)
+```
+
+```{r}
+n <- 3
+lambdas <- c(1,-1)
+#out <- my.rimagspace.pts(n,lambdas)
+rng <- c(-10,10)
+x0 <- c(0,0)
+```
+```{r}
+n <- 20
+d <- length(lambdas)
+ret <- matrix(0,n,d)
+ret[1,] <- x0
+```
+```{r}
+i <- 8
+tmp <- runif(d,min=rng[1],max=rng[2])
+tmp.mat <- matrix(t(ret[1:(i-1),]) - tmp,ncol=i-1)
+tmp2 <- apply(tmp.mat^2 * lambdas,2,sum)
+if(min(tmp2)>=0){
+  ret[i,] <- tmp
+}
+ret
+```
+```{r}
+plot(ret)
+```
+
+```{r}
+t <- seq(from=0,to=1,length=1000)*2*pi * 3
+x <- t
+y <- sin(t)
+m <- matrix(0,length(t),length(t))
+for(i in 1:length(t)){
+  for(j in 1:length(t)){
+    m[i,j] <- (x[i]-x[j])^2- (y[i]-y[j])^2
+  }
+}
+plot(x,y)
+range(m)
+```
+```{r}
+# n 発生する乱点の数
+# lambdas 虚実係数
+# x 初期点座標
+# rng 座標の範囲
+my.rimagspace.pts <- function(n,lambdas,x0=rep(0,length(lambdas)),rng=c(-10,10)){
+    d <- length(lambdas)
+    ret <- matrix(0,n,d)
+    ret[1,] <- x0
+    for(i in 2:n){
+        loop <- TRUE
+        while(loop){
+            tmp <- runif(d,min=rng[1],max[1])
+            tmp.mat <- t(ret[1:(i-1),]) - tmp
+            tmp2 <- apply(tmp.mat^2 * lambdas,2,sum)
+            if(min(tmp2)>=0){
+                ret[i,] <- tmp
+                loop <- FALSE
+            }
+        }
+    }
+    return(ret)
+}
+```

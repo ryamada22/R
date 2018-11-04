@@ -1,0 +1,102 @@
+---
+title: "Unlabeled Observation"
+author: "ryamada"
+date: "2018年3月6日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 問題設定
+
+確率的応答機がある。
+1,2,...,Kのいずれかを$P=(p_1,..,p_K)$の確率で応える機械であるという。
+
+ただし、Kは不明であり、$P$も不明である。
+
+N回の試行の結果、k種類が$N=(n_1,...,n_k)$回観察されたときに、K,$P$について事後分布推定したい。
+
+ここで、N回の試行では、k種類は区別できるが、それには特定の名前がついているわけではないとする。
+これは(A,A,A,B)という観察と(B,B,B,A)という観察は区別しないという意味である。
+
+言い換えるとUnlabelledである。
+
+# Rで計算
+
+段階を追って、推定用の道具を揃えることにする。
+
+## ラベルで区別された、K種類$P$確率ベクトルからの$K$種類$N$観察回数ベクトルの観察確率
+
+```{r}
+my.multi.selection.asympt <- function(P,N,log=TRUE){
+
+	ret <- lfactorial(sum(N)) - sum(lfactorial(N))
+	
+	ret <- ret + sum(N*log(P))
+	if(log){
+		return(ret)
+	}else{
+		return(exp(ret))
+	}
+}
+```
+
+```{r}
+P <- c(0.7,0.3)
+N <- c(3,1)
+my.multi.selection.asympt(P,N,log=FALSE)
+```
+
+## ラベルなし
+
+ラベルなしということは、関数回数ベクトルの順序をpermuteした結果、同じ観察回数ベクトルとなる場合はひとくくりにするということである。
+
+```{r}
+library(gtools)
+my.multi.selection.unlabel.asympt <- function(P,N,log=TRUE){
+  K <- length(P)
+
+	prms <- permutations(K,K)
+	N.prms <- matrix(N[prms],ncol=length(prms[1,]))
+	N.prms <- unique(N.prms)
+	ret <- rep(0,length(N.prms[,1]))
+	for(i in 1:length(ret)){
+		ret[i] <- my.multi.selection.asympt(P,N.prms[i,],log=TRUE)
+	}
+	ret.all <- log(sum(exp(ret)))
+	if(log){
+		return(list(p=ret.all,ps=ret))
+	}else{
+		return(list(p=exp(ret.all),ps=exp(ret)))
+	}
+}
+```
+
+
+```{r}
+P <- c(0.7,0.3)
+N <- c(3,1)
+my.multi.selection.unlabel.asympt(P,N,log=FALSE)
+```
+
+### 検算
+
+Unlabeledな全sum(N)観察はsum(N)の整数分割で尽くされるので、
+整数分割すべてについて、Unlabeled 確率を計算し、和を取ると1になる。
+
+```{r}
+sumN <- 5
+library(partitions)
+prts <- parts(sumN)
+library(MCMCpack)
+P <- rdirichlet(1,rep(1,sumN))
+ps <- rep(0,length(prts[1,]))
+for(i in 1:length(ps)){
+  ps[i] <- my.multi.selection.unlabel.asympt(P,prts[,i],log=FALSE)[[1]]
+}
+ps
+sum(ps)
+```
+

@@ -1,0 +1,691 @@
+---
+title: "グラフのゼータ函数"
+output: html_document
+---
+```{r,echo=FALSE}
+library(Ronlyryamada)
+library(rgl)
+library(RFOC)
+library(igraph)
+library(knitr)
+library(tagcloud)
+library(e1071)
+library(sets)
+library(orthopolynom)
+library(Matrix)
+library(GPArotation)
+```
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+```{r,echo=FALSE}
+# この関数では、thetasはz軸の角、phisはxy平面の角
+# 頂点に対応する球面調和関数の値の行列Zを作る
+# L の値は、頂点数に比して大きすぎてはだめ
+my.Z <- function(L,thetas,phis){
+  Z <- matrix(0,length(thetas),(L+1)^2)
+  cnt <- 1
+  for(i in 0:L){
+    for(j in (-i):i){
+      tmp <- sph(thetas,phis,i,j)
+      #tmp <- sph1(thetas,phis,i,j)
+      Z[,cnt] <- tmp
+      cnt <- cnt+1
+    }
+  }
+  return(Z)
+}
+
+# 球面調和関数係数推定
+# Xは頂点の(x,y,z)座標行列(3列)
+# anglesは、各頂点の球面上の角座標、angles[,1]はz軸の角、angles[,2]はxy平面の角
+
+my.spcoef.est <- function(X,angles,L){
+  Z <- my.Z(L,angles[,1],angles[,2])
+  ret <- solve(t(Z)%*% Z)%*% t(Z) %*% X
+  return(ret)
+}
+# 球面調和関数係数と、単位球面極座標から(x,y,z)座標を復元
+my.coef2xyz <- function(coefs,angles){
+  L <- sqrt(length(coefs[,1]))-1
+  Z <- my.Z(L,angles[,1],angles[,2])
+  Z %*% coefs
+}
+
+
+#球面調和関数の扱い
+
+#関数 sph() のthetaは、z軸の角度、phiはxy平面の角度
+
+# http://d.hatena.ne.jp/MikuHatsune/20160918/1474206669
+#library(orthopolynom)
+
+p_l_m <- function(l, m){ 
+  legp <- legendre.polynomials(l)[l+ 1]
+  for(mm in 1:m){
+    legp <- polynomial.derivatives(legp)
+  }
+  polynomial.coefficients(legp)[[1]]
+}
+p_l_m <- function(x, l, m){
+  legp <- legendre.polynomials(l)[l+1]
+  polynomial.values(eval(parse(text=paste0(paste(rep("polynomial.derivatives(", abs(m)), collapse=""), "legp", paste(rep(")", abs(m)), collapse=""))))[1], x)[[1]]
+}
+
+sph <- function(theta, phi, l, m){
+  x <- cos(theta)
+  y <- cos(m*phi) + 1i*sin(m*phi)
+  #Plm <- (-1)^m * (1-x^2)^(m/2)*p_l_m(x, l, m)
+  Plm <- sin(theta)^abs(m)*p_l_m(x, l, m)
+  #res <- (-1)^((m+abs(m))/2)
+  res <- (-1)^((m+abs(m))/2)*Plm*sqrt((2*l+1)/4/pi*factorial(l-abs(m))/factorial(l+abs(m)))*y
+  return(res)
+}
+
+sph1 <- function(theta, phi, l, m){
+  s <- sph(theta, phi, l, m)
+  ifelse(rep(m, length(s)) >= 0, Re(s), Im(s))
+}
+
+
+# d 次数
+# N 頂点数の多少を決めるパラメタ
+# 帰り値
+## X 3次元座標
+## E エッジリスト
+## tp 単位球面上の角座標
+## g グラフオブジェクト(igraph)
+## w エッジの長さ
+
+# 上の出力を3Dプロットする関数
+my.plot.shape <- function(shape){
+  plot3d(shape$X)
+  segments3d(shape$X[c(t(shape$E)), ])
+}
+
+
+# r 乱雑項(0はなし、正の数がその程度)
+# h1 偏り1(heterogeneity) (0-1の値。0はすべて使う。割合1-h1の点を特定の領域に集中させる)
+# h1をh2!=0と組み合せて使うときはh1>0とすること
+# h2 偏り2。観察点の粗密を入れる。0は特定の領域に集中させる
+# h2が大きくなると、集中した場所を複数個所作る。h2<=1
+# h2.fracは使う頂点の割合
+# h2k 偏り2をコントロールする係数(デフォルト値を使うことを原則とする)
+# 返り値
+## X 乱雑項を加えた座標
+## E エッジ
+## obs.id 観察点のID
+my.spharm.jikken <- function(shape,r=0,h1=0,h2=0,h2.frac=1,h2k=4){
+  X <- shape$X + rnorm(length(shape$X))*r
+  n <- length(X[,1])
+  if(h2==0){
+    obs.n <- ceiling(n * (1-h1))
+    tmp <- c(1:n,1:n)
+    s <- sample(1:n,1)
+    obs.id <- tmp[(1:obs.n)+s]
+  }else{
+    obs.n <- ceiling(n *(1-h1))
+    obs.n2 <- obs.n * 2
+    tmp <- c(1:n,1:n,1:n,1:n)
+    s <- sample(1:n,1)
+    obs.id <- tmp[(1:obs.n2)+s]
+    #plot(obs.id)
+    tmpn <- length(obs.id)
+    pr <- h2k*(1 + cos((1:tmpn)/tmpn * pi * (1+h2*100)))
+    obs.id <- sample(obs.id,ceiling(n *h2.frac),replace=TRUE,prob=pr)
+    obs.id <- unique(obs.id)
+  }
+  return(list(X=X,E=shape$E,angles=shape$angles,obs.id=obs.id))
+}
+# 上の実験観測点をハイライトしてプロットする関数
+my.plot.ex <- function(ex,obscol=2,r=0.05){
+  plot3d(ex$X)
+  segments3d(ex$X[c(t(ex$E)), ])
+  spheres3d(ex$X[ex$obs.id,],color=obscol,radius=r)
+}
+# 上の実験観測点の分布を、単位球面上での粗密でプロットする関数
+my.plot.ex.sphere <- function(ex,obscol=2,r=0.05){
+  z <- cos(ex$angles[,1])
+  x <- sin(ex$angles[,1]) * cos(ex$angles[,2])
+  y <- sin(ex$angles[,1]) * sin(ex$angles[,2])
+  XX <- cbind(x,y,z)
+  plot3d(XX)
+  segments3d(XX[c(t(ex$E)), ])
+  spheres3d(XX[ex$obs.id,],color=obscol,radius=r)
+}
+# オリジナルの形と復元した形とを併せてプロットする関数
+# 球面調和関数係数も返す
+my.plot.oriANDest <- function(ex,obscol=1,r=0.05,L=15){
+  my.plot.ex(ex,obscol=obscol,r=r)
+  #spheres3d(ex$X,color=2,radius)
+  coef1 <- my.spcoef.est(ex$X[ex$obs.id,],ex$angles[ex$obs.id,],L)
+  ex1X.est <- my.coef2xyz(coef1,ex$angles)
+  spheres3d(Re(ex1X.est),color=2,radius=r)
+  segments3d(Re(ex1X.est)[c(t(ex$E)), ],color=2)
+  
+  return(list(coef=coef1,Xest=ex1X.est))
+}
+
+my.cell.shape2 <- function(d,k,N){
+  # 形の凹凸・複雑さをコントロールするパラメタ、n,k
+  n <- d
+  #k <- 8
+  # メッシュのノード数をコントロールするパラメタ
+  n.mesh <- N # 色々試すなら、32くらいにしておくのが無難。送ったhtmlファイルはn.mesh=64
+  # 形を球面調和関数係数ベクトルで指定する
+  A. <- matrix(runif(n^2), n, n)
+  A.[1, 1] <- k
+  B <- matrix(rnorm(n^2), n, n)
+  # 閉曲面オブジェクトを作る
+  xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+  
+  #xxx$v <- xxx$v + rnorm(length(xxx$v))*r
+
+  g <- graph.edgelist(xxx$edge,directed=FALSE)
+  vname <- paste("",1:length(V(g)),sep="")
+  g <- set_vertex_attr(g,"name",value=vname)
+  # edge lengths
+  w <- sqrt(apply((xxx$v[xxx$edge[,1],]-xxx$v[xxx$edge[,2],])^2,1,sum))
+  
+  # thetas,phis
+  tmp <- my_sphere_tri_mesh(n.mesh)
+  xyz <- tmp$xyz
+  tosp <- TOSPHERE(xyz[, 1], xyz[, 2], xyz[, 3])
+  tp <- cbind(tosp[[1]]/360 * 2 * pi, tosp[[2]]/360 * 2 * pi)
+  
+  return(list(X = xxx$v,X.sp=xyz, E = xxx$edge, tri=xxx$f, angles = cbind(tp[,2],tp[,1]),g=g,w=w ))
+}
+
+my.inside.triangle.multi <- function(pt,tri){
+	coef <- solve(tri) %*% pt
+	inout <- apply(coef,2,function(x){all(x >=0)})
+	return(list(ins = which(inout),in.coef=coef[,which(inout)],inout=inout,all.coef=coef))
+}
+
+library(igraph)
+my.bigraph <- function(g){
+  el <- as_edgelist(g)
+  el2 <- rbind(el,cbind(el[,2],el[,1]))
+  ret <- graph.edgelist(el2)
+  return(ret)
+}
+my.WE <- function(g){
+  el <- as_edgelist(g)
+  n.e <- length(el[,1])
+  edge.mat <- matrix(0,n.e,n.e)
+	for(i in 1:n.e){
+		st <- el[i,1]
+		ed <- el[i,2]
+		tmp <- which(el[,1]==ed & el[,2]!=st)
+		edge.mat[i,tmp] <- 1
+	}
+  return(edge.mat)
+}
+my.bigraphWE <- function(G){
+  g <- my.bigraph(G)
+  return(my.WE(g))
+}
+library(complexplus) # 複素行列計算用
+my.Ihara.zeta.e <- function(g,u){
+  g.bi <- my.bigraph(g) # 両方向グラフにする
+  we <- my.WE(g.bi) # WE 行列を作る
+  return(Det(diag(rep(1,length(we[,1]))) - we * u)) # 行列式を計算して返す
+}
+```
+
+
+
+```{r}
+#el <- rbind(c(1,2),c(2,3),c(3,4),c(4,1),c(1,3))
+el <- rbind(c(1,2),c(2,3),c(3,1),c(1,4),c(4,3))
+g <- graph.edgelist(el,directed =FALSE)
+plot(g)
+```
+
+```{r}
+WEbi <- my.bigraphWE(g)
+```
+```{r}
+WEbi
+```
+```{r}
+det(WEbi)
+```
+
+```{r}
+d <- 4
+k <- 10
+N <- 15
+cell <- my.cell.shape2(d,k,N)
+```
+```{r}
+WEcell <- my.bigraphWE(cell$g)
+```
+```{r}
+det(WEcell)
+```
+```{r}
+eigen.out <- eigen(WEcell)
+```
+```{r}
+plot(eigen.out[[1]])
+```
+
+```{r}
+my.plot.shape(cell)
+```
+
+```{r}
+a <- get.adjacency(cell$g)
+```
+
+```{r}
+plot(eigen(a)[[1]])
+```
+```{r}
+eout <- eigen(a)
+eout[[1]][1:5]
+```
+
+```{r}
+g.bi <- my.bigraph(g)
+plot(g.bi,edge.label=1:8,edge.curved=TRUE)
+```
+```{r}
+WE <- my.WE(g.bi)
+WE
+```
+
+```{r}
+det(WE)
+```
+```{r}
+u <- rnorm(1) + 1i * rnorm(1)
+my.Ihara.zeta.e(g,u)
+```
+
+### ゼータ函数の逆数である多項式を返す関数を書く
+
+ゼータ函数の逆数である多項式の係数が整数係数であることを利用して、適当な複素数を複数指定し、それに対応するゼータ函数値を求め、
+その複素数とゼータ函数値のペアが作る連立方程式を解くことで整数係数を求めることができる。
+
+以下の函数はその要領で整数係数を求めるとともに、その整数係数多項式を持ちいて、ゼータ函数値を算出する函数である。
+
+
+```{r}
+my.Ihara.zeta.poly <- function(g){
+  n.e <- length(E(g))*2
+  us <- rnorm(n.e)
+  U <- matrix(0,n.e,n.e)
+  for(i in 1:length(us)){
+    #U[i,] <- (-us[i])^(1:n.e)
+    U[i,] <- (us[i])^(1:n.e)
+  }
+  vs <- rep(0,n.e)
+  for(i in 1:n.e){
+    vs[i] <- my.Ihara.zeta.e(g,us[i])
+  }
+  A <- solve(U) %*% (vs-1)
+
+  return(c(1,A))
+}
+
+my.Ihara.zeta.poly.calc <- function(g,u=2){
+  A <- round(my.Ihara.zeta.poly(g))
+  #v <- sum(A * (-u)^(0:(length(A)-1)))
+  v <- sum(A * (u)^(0:(length(A)-1)))
+  return(list(v=v,A=A))
+}
+```
+
+```{r}
+my.Ihara.zeta.poly.calc(g,u)
+```
+
+この出力は以下の整数係数多項式を意味している($Aの第一成分が$u^0$の項)。
+
+
+$$
+1\times u^0 + (-2)\times u^4 + 1 \times u^8
+$$
+
+### ゼータ函数が計算している内容を確認する
+
+$$
+\zeta_E(u)^{-1}\\
+= \det{ (I - u W_E) }\\
+=\sum_{\sigma \in S} \prod(diag((I-W_E)[,\sigma]))\\
+=\sum_{i=0} a_i u^i
+$$
+
+ゼータ函数は、行列$W_E$を含んだ行列の行列式で表される。
+
+その内実を展開すれば、対称Digraphのすべてのエッジの順列 $\sigma \in S$について、行列の列の置換を行い、その対角成分の積を足し合わせたものである。
+
+そして、その個々の項は、$0,u^0,...,u^N$(ただし$N$はDigraphのエッジ本数)のいずれかとなるので$u^0,...,u^N$の整数係数多項式になる、という意味である。
+
+$\prod(diag((I-W_E)[,\sigma]))$ が1になる場合とは、$\sigma$が置換ではない、オリジナルの並び方の場合である。
+
+一方、$\prod(diag((I-W_E)[,\sigma]))$が$u^k;k>0$となる場合は、1つ以上のサイクル(Closed backtrackless tailess primitive paths (CBTPP))が存在し、そのサイクルの辺の長さの和がkとなる場合である。
+
+このとき、複数のサイクルは対象Digraphの辺を共有しない。逆に言うと、サイクルのべき集合のうち、相互に重複しないようにグラフ上に配置できるものが$\sigma \in S$にて列挙されることがわかる。
+
+したがって、$\sum_{i=0} a_i u^i$における$\sum a_i$は、そのような条件を満たすべき集合要素の総数に相当する。
+
+今、重複せずに配置できるサイクルの組み合わせを、基本サイクル(素数的サイクル)の積であると見なせば、
+
+基本サイクル$p \in [P]$に関する $\prod_{p \in [P]} (1-u^{|p|})$として、重複せずに配置できるサイクル組み合わせに関する式となることがわかる。
+
+### 配置可能サイクル集合を考慮したゼータ函数計算方法をRで実装しておく
+
+
+
+
+順列のうち、非0を返すもののみを選別するために、検討するべき置き換えパターンを行ごとに出力する函数。
+```{r}
+my.ok.loc <- function(WE){
+  tmp <- diag(rep(1,length(WE[,1]))) - WE * 2
+  tmp2 <- apply(apply(tmp,2,function(x)x!=0),2,function(x)which(x))
+  if(is.matrix(tmp2)){
+    tmp3 <- list()
+    for(i in 1:length(tmp2[1,])){
+      tmp3[[i]] <- tmp2[,i]
+    }
+    ret <- tmp3
+  }
+  else{
+    ret <- tmp2
+  }
+  return(ret)
+}
+
+```
+
+非0を返す順列のみを取り出す函数。
+```{r}
+my.ok.perm <- function(WE){
+  tmp <- my.ok.loc(WE)
+  tmp2 <- expand.grid(tmp)
+  tmp3 <- apply(tmp2,1,sort)
+  tmp4 <- apply(tmp3,2,diff)
+  tmp5 <- apply(tmp4,2,prod)
+  okperm <- tmp2[which(tmp5!=0),]
+  sgn <- rep(0,length(okperm[,1]))
+  nu <- sgn
+  for(i in 1:length(sgn)){
+    ok <- unlist(okperm[i,])
+    sgn[i] <- det((diag(rep(1,length(ok))))[,ok])
+    nzero <- length(which(ok-(1:length(ok)) == 0))
+    nu[i] <- length(ok)-nzero
+  }
+  return(list(okperm=okperm,sgn=sgn,nu=nu))
+}
+```
+
+上記２函数を用いて、非0を返す順列を返しつつ、それを用いたゼータ函数値を計算する函数。
+
+```{r}
+my.Ihara.zeta.okperm <- function(g,u=2){
+  g.bi <- my.bigraph(g)
+  WE <- my.WE(g.bi)
+  ok <- my.ok.perm(WE)
+  v <- sum(ok$sgn * (-u)^ok$nu)
+  return(list(zeta=v,okperm=ok,WE=WE))
+}
+```
+
+```{r}
+my.Ihara.zeta.e(g,u)
+my.Ihara.zeta.poly.calc(g,u)
+ok <- my.Ihara.zeta.okperm(g,u)
+ok
+```
+
+非0を返す順列のそれぞれについて、対角成分のすべては非0になる様子を示しておく。
+
+```{r}
+for(i in 1:(length(ok$okperm$sgn))){
+  print((diag(rep(1,length(ok$WE[1,])))-2*ok$WE)[unlist(ok$okperm$okperm[i,]),])
+}
+
+```
+
+また、それぞれの状態ごとに、どのノードセットがサイクルをなすか(残りのノードは孤立する)、を表示しておく。
+
+```{r}
+for(i in 1:(length(ok$okperm$sgn))){
+  oo <- unlist(ok$okperm$okperm[i,])
+  el <- cbind(oo, 1:length(oo))
+  plot(graph.edgelist(el))
+}
+
+```
+
+## グラフのゼータ函数値の別計算法
+
+上述のグラフのゼータ函数値計算法は、グラフの対象性Digrahpのエッジ連結行列を用いたものであったが、
+
+その他に、グラフのノードに関する隣接行列を用いる方法、グラフの中に全域木を定め、全域木に含まれないエッジのみを用いて計算量を抑える方法の２方法が知られている。
+
+以下にそれぞれを実装しておく。
+
+### ノードを用いた計算法
+
+Iharaのゼータ函数は、Barholdiのゼータ函数の特殊形なので、２通りの方法で実装しておく
+```{r}
+library(igraph)
+library(complexplus)
+my.Ihara.zeta.elem <- function(g){
+	A <- as.matrix(as_adjacency_matrix(g))
+	n.v <- length(V(g))
+	n.e <- length(E(g))
+	r <- n.e - n.v
+	D <- diag(degree(g))
+	H <- diag(degree(g)-1) 
+	I <- diag(rep(1,n.v))
+	return(list(r=r,A=A,H=H,I=I,D=D,n.v=n.v,n.e=n.e))
+}
+my.Ihara.zeta.ori <- function(g,u){
+	elem <- my.Ihara.zeta.elem(g)
+	1/((1-u^2)^elem$r * Det(elem$I-u*elem$A + u^2*elem$H))
+}
+
+my.Bartholdi.zeta <- function(g,u,t){
+	elem <- my.Ihara.zeta.elem(g)
+	tmp <- (1-(1-u)^2*t^2)^elem$r * Det(elem$I-t*elem$A+(1-u)*(elem$D-(1-u)*elem$I)*t^2)
+	return(1/tmp)
+}
+
+my.Ihara.zeta <- function(g,u){
+	my.Bartholdi.zeta(g,0,u)
+}
+```
+
+### エッジを用いた計算法
+
+エッジに長さの重みをつけて計算することもできる
+
+サイクルの長さの計算方法に２法あるので、それを別々に実装しておく
+
+```{r}
+# (エッジ長ｘ２）^2 行列でのゼータ関数
+my.Ihara.zeta.e <- function(g,u){
+	el <- as_edgelist(g)
+	el2 <- rbind(el,cbind(el[,2],el[,1]))
+	n.e <- length(el[,1])
+	edge.mat <- matrix(0,n.e*2,n.e*2)
+	for(i in 1:(n.e*2)){
+		st <- el2[i,1]
+		ed <- el2[i,2]
+		tmp <- which(el2[,1]==ed & el2[,2]!=st)
+		edge.mat[i,tmp] <- 1
+	}
+	I <- diag(rep(1,n.e*2))
+	tmpmat <- I - edge.mat * u
+	return(1/Det(tmpmat))
+}
+# エッジにウェイトがある場合
+# Wマトリックスの要素がエッジウェイトによって値を変える
+# エッジペアがつながっていたら、２つのエッジの長さの平均を重みにとる
+my.Ihara.zeta.e.w <- function(g,u){
+	w <- E(g)$weight
+	w <- c(w,w)
+	if(is.null(w)){
+		w <- rep(1,length(E(g))*2)
+	}
+	el <- as_edgelist(g)
+	el2 <- rbind(el,cbind(el[,2],el[,1]))
+	n.e <- length(el[,1])
+	edge.mat <- matrix(0,n.e*2,n.e*2)
+	for(i in 1:(n.e*2)){
+		st <- el2[i,1]
+		ed <- el2[i,2]
+		tmp <- which(el2[,1]==ed & el2[,2]!=st)
+		edge.mat[i,tmp] <- u^((w[i]+w[tmp])/2) # u^w[i]にしてもよい
+	}
+	I <- diag(rep(1,n.e*2))
+	tmpmat <- I - edge.mat
+	return(1/Det(tmpmat))
+}
+my.Ihara.zeta.e.w2 <- function(g,u){
+	w <- E(g)$weight
+	w <- c(w,w)
+	if(is.null(w)){
+		w <- rep(1,length(E(g))*2)
+	}
+	el <- as_edgelist(g)
+	el2 <- rbind(el,cbind(el[,2],el[,1]))
+	n.e <- length(el[,1])
+	edge.mat <- matrix(0,n.e*2,n.e*2)
+	for(i in 1:(n.e*2)){
+		st <- el2[i,1]
+		ed <- el2[i,2]
+		tmp <- which(el2[,1]==ed & el2[,2]!=st)
+		edge.mat[i,tmp] <- u^(w[i]) # u^w[i]にしてもよい->my.Ihara.zeta.e.w2()
+	}
+	I <- diag(rep(1,n.e*2))
+	tmpmat <- I - edge.mat
+	return(1/Det(tmpmat))
+}
+```
+
+全域木を取り出して軽くする方法。パスを基準にする方法と呼ばれる。
+
+
+```{r}
+my.Ihara.zeta.path <- function(g,u){
+	# まずはedge zetaと同じ処理
+	# その後で全域木(minimum spaning tree)を取り出して、その補を取る
+	w <- E(g)$weight
+	if(is.null(w)){
+		w <- rep(1,length(E(g)))
+	}
+	mst <- mst(g,weights=w)
+	
+	comst <- g- mst
+	n.e.co <- length(E(comst))
+	Z <- matrix(0,n.e.co*2,n.e.co*2)
+	w.co <- E(comst)$weight
+	w.co <- c(w.co,w.co)
+	#diag(Z) <- u^w.co
+	el <- as_edgelist(comst)
+	el2 <- rbind(el,cbind(el[,2],el[,1]))
+
+	for(i in 1:((n.e.co*2))){
+		for(j in 1:(n.e.co*2)){
+			if(abs(i-j) == n.e.co){
+				Z[i,j] <- 0
+			#}else if(i==j){
+				
+			}else{
+				a <- el2[i,2]
+				b <- el2[j,1]
+				tmp <- w.co[i]/2 + w.co[j]/2 + shortest.paths(mst,a,b)
+				#tmp <- shortest.paths(mst,a,b,weights=E(mst)$weight)
+				Z[i,j] <- u^tmp
+				#a <- el2[j,2]
+				#b <- el2[i,1]
+				#tmp <- w.co[i] + w.co[j] + shortest.paths(mst,a,b)
+				#Z[j,i] <- u^tmp
+			}
+		}
+	}
+	I <- diag(rep(1,n.e.co*2))
+	tmpmat <- I - Z
+	return(1/Det(tmpmat))
+}
+
+#my.Ihara.zeta.path(g,xy.[30])
+#my.Ihara.zeta.e.w(g,xy.[30])
+
+# エッジに整数長さがあるときに、すべてのエッジ長が１となるように
+# ノードを加えたグラフに変換する
+# E(g)$weight <- sample(1:20,n.e)
+
+my.graph.inflation.weight <- function(g){
+	w <- E(g)$weight
+	el <- as_edgelist(g)
+	A <- as.matrix(as_adjacency_matrix(g))
+	for(i in 1:length(w)){
+		if(w[i] > 1){
+			nv <- w[i]-1
+			st <- el[i,1]
+			ed <- el[i,2]
+			A[st,ed] <- A[ed,st] <- 0
+			n <- length(A[,1])
+			newA <- matrix(0,n+nv,n+nv)
+			newA[1:n,1:n] <- A
+			newA[n+1,st] <- newA[st,n+1] <- 1
+			newA[n+nv,ed] <- newA[ed,n+nv] <- 1
+			if(nv > 1){
+				for(j in 1:(nv-1)){
+					newA[n+j,n+j+1] <- newA[n+j+1,n+j] <-1
+				}
+			}
+			A <- newA
+		}
+	}
+	newg <- graph.adjacency(A,mode="undirected")
+	return(newg)
+}
+
+#E(g)$weight <- rep(3,n.e)
+#newg <- my.graph.inflation.weight(g)
+
+
+fu <- function(u){
+	tmp <- (-1)*(3*u-1)*(u+1)^5*(u-1)^6*(3*u^2+u+1)^4
+	return(1/tmp)
+}
+
+#g <- sample_gnp(10, 2/10)
+n <- 5
+adj <- matrix(1,n,n)
+diag(adj) <- 0
+g <- graph.adjacency(adj,mode="undirected")
+
+x <- y <- seq(from=-0.8,to=0.8,length=100)
+
+xy <- expand.grid(x,y)
+xy. <- xy[,1] + 1i*xy[,2]
+
+vs <- rep(0,length(xy.))
+vs2 <- vs
+for(i in 1:length(vs)){
+	vs[i] <- my.Ihara.zeta(g,xy.[i])
+	vs2[i] <- fu(xy.[i])
+}
+my.Ihara.zeta(g,vs[55])
+fu(vs[55])
+plot(xy,col=abs(Mod(vs)))
+
+
+fu2 <- function(u){
+	tmp <- (1-u^10)^5*(1-3*u^5)*(1-u^5)*(1+u^5+3*u^10)
+	return(1/tmp)
+}
+
+
+fu(vs[515]^5)
+fu2(vs[515])
+```

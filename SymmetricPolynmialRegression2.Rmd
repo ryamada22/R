@@ -1,0 +1,296 @@
+---
+title: "Symmetric Polynomial Regression"
+author: "ryamada"
+date: "2017年10月15日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 課題 Task
+
+以下の関数を考える。 Assume a function below. 
+$$
+y=f(X=(x_1,...,_n)) \\
+R^n \rightarrow R
+$$
+
+この関数 f は多変量$X$に関して対称であるとする。
+
+Assume f is symmetric for multiple variables $X$.
+
+今、複数のデータ点${(X_i,f(X_i))}$が得られているものとして、関数$f$の性質を理解したい。
+そのために、$f$を$X$の多項式で表すこととする。
+
+Now assume we have multiple data points ${(X_i,f(X_i))}$ and we want to understand $f$.
+To understand $f$, we are going to express $f$ in the form of polynomial expression of $X$.
+
+# 対称多項式 Symmetric polynomial expression
+
+## 和 Summation
+
+以下のような単項を全変数にわたって足し合わせたものは対称。
+
+Sum of monomials over all variables is symmetric.
+$$
+\sum_{i=1}^n x_i^p
+$$
+## 積 Production
+
+以下のように同じ次数の単項を全変数にわたって掛け合わせたものは対称。
+
+Product of monomials of the same degree is symmetric.
+
+$$
+\prod_{i=1}^n x_i^p
+$$
+
+## 和と積との組み合わせ Combination of summation and production
+
+次数の異なる単項の積は、変数の組み合わせに関して足し合わせると対称。
+
+Products of monomials with different degrees should be summed over all combinations of variables.
+
+$$
+\sum_{\sigma=(s_1,...,s_n) \in S} \prod_{i=1}^n x_i^{a_i}
+$$
+
+次数が同じ単項の和は、$A=(a_1,...,a_n)$のうち、ある一つの要素だけが非0であって、残りがすべての0の場合に相当し、字数が同じ単項の積は、$A$の要素がすべて同じ値に相当する。その場合には、$\sigma$に関する和は、すべての変数の置換が可能であることから、順列を考慮しなくてよいことから、上式に一致する。
+
+
+The case of sum of monomials with same degree corresponds to the case where only one element of $A=(a_1,...,a_n)$ is non-zero and all the others are zero.
+
+The case of product of monomials with same degree corresponds to the case where all element of $A$ are the same; in this case summation over the permutations of (1,2,...,n) can be omitted due to mutual exchangeability of variables.
+
+# 対称多項式回帰
+
+次数が$0,1,2,...,n\times k=p$の対称多項式の線形和となる関数を考える。
+
+A function that is linear sum of symmetric polynomials whose degree is up to $n\times k=p$.
+
+
+$$
+\hat{f}(X) = \sum_{P[0..p]} \frac{n!}{\prod_{j=1}^n \alpha_j!} \sum_{\sigma=(s_1,...,s_n) \in S} \prod_{i=1}^n x_{s_i}^{a_i}
+$$
+
+ただし、$\sum_{i=1}^n a_i = A; A \in {0,1,...,p}$ かつ $\sum_{i=1}^n \alpha_i = n$ であり、Sは (1,2,...,n)の全順列の集合。
+
+$\sum_{i=1}^n a_i = A; A \in {0,1,...,p}$ and $\sum_{i=1}^n \alpha_i = n$ and S is the set of permutations of (1,2,...,n).
+
+
+# Rによる対称多項式回帰 Symmetric polynomial regression with R
+
+## ユーティリティ関数 Utility functions
+
+```{r}
+library(partitions)
+library(gtools)
+# calculate monovariate polynomial function value
+# xs : values in support
+# as : coeffs of polynomial formula, with as[1] = a_0
+my.poly <- function(xs,as){
+	ret <- rep(0,length(xs))
+	for(i in 1:length(as)){
+		ret <- ret + as[i] * xs^(i-1)
+	}
+	return(ret)
+}
+# calculate symmetric multivariate polynomial function value
+# symmetric multivariate polynomial function is multiplication of
+# monovariate polynomial functions with the same coefficients
+my.symmetric.poly <- function(Xs,as){
+	if(!is.matrix(Xs)){
+		Xs <- matrix(Xs,ncol=1)
+	}
+	ret <- rep(1,length(Xs[,1]))
+	for(i in 1:length(Xs[1,])){
+		ret <- ret * my.poly(Xs[,i],as)
+	}
+	return(ret)
+}
+
+# n : number of variables
+# k : the degree of monovariate polynomial
+# returns the partitions of 0,1,...,n*k whose element values <= k
+# and returns integer list that stands for duplication due to the exchangeability of variables
+# whose index in terms are identical
+my.serial.partitions <- function(n,k){
+	p <- n*k
+	rp <- matrix(0,n,1)
+	for(i in 1:p){
+		tmp <- restrictedparts(i,n)
+		rp <- cbind(rp,tmp[,which(apply(tmp,2,max)<=k)])
+	}
+	dupl <- sapply(apply(rp,2,table),function(x)prod(factorial(x)))
+	return(list(rp=rp,dupl=dupl))
+}
+
+# Calculates coefficients of monovariate polynomial from
+# coefficients of symmetric multivariate polynomial
+# as : coefficients of all symmetric terms that should be estimated by linear regression
+# rp : patterns of interger partitions that are used in the multivariate symmetric polynomial
+my.polybeta.from.multpoly <- function(as,rp){
+	p <- max(rp)
+	n <- length(rp[,1])
+	ret <- rep(0,p+1)
+	for(i in 0:p){
+		tmp <- which(apply(abs(rp-i),2,sum)==0)
+		if(i>0){
+		  onlyi <- which(apply(rp==0,2,sum)==(n-1) & apply(rp,2,sum)==i)
+		  ret[i+1] <- abs(as[tmp])^(1/n)*sign(as[onlyi])
+		}else{
+		  ret[i+1] <- abs(as[tmp])^(1/n)* sign(as[1])
+		}
+		
+		#ret[i+1] <- abs(as[tmp])^(1/n)*sign(as[tmp])
+		
+	}
+	return(ret)
+}
+
+# Linear regression of symmetric polynomial
+# args : Xs, y, and k (max degree of monovariate polynomial)
+# values :
+# lm.out : output of lm() with all symmetric terms
+# pred.as : estimated coefficients of MONOvariate poly
+# rp : All partitions considered
+# dupl: coefficents for all partitions to take care exchangeability of variables
+
+my.sym.poly.lm <- function(Xs,y,k){
+	n <- length(Xs[1,])
+	rp.dupl <- my.serial.partitions(n,k)
+	rp <- rp.dupl[[1]]
+	dupl <- rp.dupl[[2]]
+
+	pms <- permutations(n,n)
+	ret <- matrix(0,length(Xs[,1]),length(rp[1,]))
+	for(i in 1:length(rp[1,])){
+		for(j in 1:length(pms[,1])){
+			tmp <- rep(1,length(Xs[,1]))
+			for(j2 in 1:n){
+				tmp <- tmp * Xs[,pms[j,j2]]^rp[j2,i]
+			}
+			ret[,i] <- ret[,i] + tmp
+		}
+	}
+	Xs.poly.terms <- t(t(ret)/dupl)
+	lm.out <- lm(y~Xs.poly.terms-1)
+	pred.as <- my.polybeta.from.multpoly(lm.out[[1]],rp)
+	
+	return(list(lm.out=lm.out,pred.as=pred.as,rp=rp,dupl=dupl))
+
+}
+
+```
+
+## 例 Examples
+
+### 例1 Example 1 データが完璧な場合 When data set is theoretical
+
+適当に単変数多項式係数を定める。
+
+適当に多変量説明変数点をとり、対応する多変量多項式で被説明変数値を出す。
+
+Set coefficients for a monovariate polynomial.
+
+Set points of multivariate explanatory variables and calculate their theoretical dependent variable values.
+
+その上で対称多項式回帰を行い、正しく係数推定されることを確かめる。
+
+Then, check the results of symmetric polynomial regression being the input coefficient values.
+
+```{r}
+n <- 5
+n.pt <- 1000
+Xs <- matrix(rnorm(n.pt*n),ncol=n)
+Xs <- Xs/max(abs(Xs))
+k <- 5
+as <- rnorm(k+1)
+y <- my.symmetric.poly(Xs,as)
+
+out <-my.sym.poly.lm(Xs,y,k)
+
+plot(y,predict(out$lm.out))
+
+```
+
+### 例2 Example 1 背景に対称多項式があるが、乱雑項がある場合 Multivariate polynomial is true but with random errors
+
+```{r}
+n <- 3
+n.pt <- 10000
+Xs <- matrix(rnorm(n.pt*n),ncol=n)
+Xs <- Xs/max(abs(Xs))
+k <- 5
+as <- rnorm(k+1)
+y <- my.symmetric.poly(Xs,as)
+# error
+y <- y + rnorm(n.pt) * sd(y)*0.1
+
+
+out <-my.sym.poly.lm(Xs,y,k)
+
+plot(y,predict(out$lm.out))
+
+```
+
+### 例3 背景が非線形な場合 Non linear function is true
+
+
+```{r}
+n <- 5
+n.pt <- 10000
+Xs <- matrix(rnorm(n.pt*n),ncol=n)
+Xs <- Xs/max(abs(Xs))
+
+y <- apply(sin(Xs),1,sum) + apply(cos(Xs^2),1,sum)
+# error
+y <- y + rnorm(n.pt) * sd(y)*0.1
+
+k <- 4
+out <-my.sym.poly.lm(Xs,y,k)
+
+plot(y,predict(out$lm.out))
+
+```
+
+# 工夫 Modification
+
+上記では、0,1,2,...,p次のすべての対称式を要素として回帰をした。
+
+All symmetric components were included in the regression formula in the above examples.
+
+次のような工夫が考えられる。
+
+Modifications below could be considered.
+
+## 単項の和のみを使う Sum of monomials only
+
+$A=(a_1,...,a_n)$、$(a_1=a_2=...=a_n=i),i=0,1,2,...$の$\sum_{i=1}^n x_i^i$ の項のみを用いる。
+
+Use  the terms $\sum_{i=1}^n x_i^i$ only where $A=(a_1,...,a_n)$、$(a_1=a_2=...=a_n=i),i=0,1,2,...$.
+
+## 単項の積のみを使う Product of monomials only
+
+$\prod_{i=1}^n x_i^i$の項のみを用いる。
+
+## 対称性の強い項のみを用いる Terms with strong symmetricity
+
+Sum of monomials and product of monomials only
+
+## 階層的に回帰する Perform regression hierarchically
+
+はじめに、単項の和について回帰し、その残差について単項の積を用いて回帰し、さらにその残差にそれ以外の項で回帰する、というような階層構造を入れる。
+
+Perform sum of monomials first, then product of monomials on the residuals then all the other symmetric terms on the further residuals.
+
+次数についても階層化できる。はじめに0次の項、次に1次、ついで、2次というように、残差を高次項で回帰する。
+
+Hierarchical approaches can be used for degrees. Initilly perform regression with 0-degree terms, then apply 1-degree terms on the residual, then 2-degree terms on the further residuals and so on.
+

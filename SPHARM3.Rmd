@@ -1,0 +1,251 @@
+---
+title: "SPHARM3"
+output: html_document
+---
+# 形のバリエーションをつけて、形復元との関係を見る
+
+形次数 d、頂点数パラメタ N、乱雑項 r、偏り係数 h1,h2
+をランダムに変えて、結果を記録する。
+
+# 必要とするパッケージ
+
+```{r,echo=FALSE}
+library(Ronlyryamada)
+library(rgl)
+library(RFOC)
+library(igraph)
+library(knitr)
+library(tagcloud)
+library(e1071)
+library(sets)
+library(orthopolynom)
+library(Matrix)
+```
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+
+$C = (Z^T Z)^{-1} Z^T V$を解くための関数
+
+```{r,echo=FALSE}
+# この関数では、thetasはz軸の角、phisはxy平面の角
+# 頂点に対応する球面調和関数の値の行列Zを作る
+# L の値は、頂点数に比して大きすぎてはだめ
+my.Z <- function(L,thetas,phis){
+  Z <- matrix(0,length(thetas),(L+1)^2)
+  cnt <- 1
+  for(i in 0:L){
+    for(j in (-i):i){
+      tmp <- sph(thetas,phis,i,j)
+      #tmp <- sph1(thetas,phis,i,j)
+      Z[,cnt] <- tmp
+      cnt <- cnt+1
+    }
+  }
+  return(Z)
+}
+
+# 球面調和関数係数推定
+# Xは頂点の(x,y,z)座標行列(3列)
+# anglesは、各頂点の球面上の角座標、angles[,1]はz軸の角、angles[,2]はxy平面の角
+
+my.spcoef.est <- function(X,angles,L){
+  Z <- my.Z(L,angles[,1],angles[,2])
+  ret <- solve(t(Z)%*% Z)%*% t(Z) %*% X
+  return(ret)
+}
+# 球面調和関数係数と、単位球面極座標から(x,y,z)座標を復元
+my.coef2xyz <- function(coefs,angles){
+  L <- sqrt(length(coefs[,1]))-1
+  Z <- my.Z(L,angles[,1],angles[,2])
+  Z %*% coefs
+}
+```
+
+球面調和関数の扱い
+
+関数 sph() のthetaは、z軸の角度、phiはxy平面の角度
+```{r,echo=FALSE}
+# http://d.hatena.ne.jp/MikuHatsune/20160918/1474206669
+#library(orthopolynom)
+
+p_l_m <- function(l, m){ 
+  legp <- legendre.polynomials(l)[l+ 1]
+  for(mm in 1:m){
+    legp <- polynomial.derivatives(legp)
+  }
+  polynomial.coefficients(legp)[[1]]
+}
+p_l_m <- function(x, l, m){
+  legp <- legendre.polynomials(l)[l+1]
+  polynomial.values(eval(parse(text=paste0(paste(rep("polynomial.derivatives(", abs(m)), collapse=""), "legp", paste(rep(")", abs(m)), collapse=""))))[1], x)[[1]]
+}
+
+sph <- function(theta, phi, l, m){
+  x <- cos(theta)
+  y <- cos(m*phi) + 1i*sin(m*phi)
+  #Plm <- (-1)^m * (1-x^2)^(m/2)*p_l_m(x, l, m)
+  Plm <- sin(theta)^abs(m)*p_l_m(x, l, m)
+  #res <- (-1)^((m+abs(m))/2)
+  res <- (-1)^((m+abs(m))/2)*Plm*sqrt((2*l+1)/4/pi*factorial(l-abs(m))/factorial(l+abs(m)))*y
+  return(res)
+}
+
+sph1 <- function(theta, phi, l, m){
+  s <- sph(theta, phi, l, m)
+  ifelse(rep(m, length(s)) >= 0, Re(s), Im(s))
+}
+
+```
+
+
+```{r,echo=FALSE}
+# d 次数
+# N 頂点数の多少を決めるパラメタ
+# 帰り値
+## X 3次元座標
+## E エッジリスト
+## tp 単位球面上の角座標
+## g グラフオブジェクト(igraph)
+## w エッジの長さ
+my.cell.shape <- function(d,N){
+  # 形の凹凸・複雑さをコントロールするパラメタ、n,k
+  n <- d
+  k <- 8
+  # メッシュのノード数をコントロールするパラメタ
+  n.mesh <- N # 色々試すなら、32くらいにしておくのが無難。送ったhtmlファイルはn.mesh=64
+  # 形を球面調和関数係数ベクトルで指定する
+  A. <- matrix(runif(n^2), n, n)
+  A.[1, 1] <- k
+  B <- matrix(rnorm(n^2), n, n)
+  # 閉曲面オブジェクトを作る
+  xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+  
+  #xxx$v <- xxx$v + rnorm(length(xxx$v))*r
+
+  g <- graph.edgelist(xxx$edge,directed=FALSE)
+  vname <- paste("",1:length(V(g)),sep="")
+  g <- set_vertex_attr(g,"name",value=vname)
+  # edge lengths
+  w <- sqrt(apply((xxx$v[xxx$edge[,1],]-xxx$v[xxx$edge[,2],])^2,1,sum))
+  
+  # thetas,phis
+  tmp <- my_sphere_tri_mesh(n.mesh)
+  xyz <- tmp$xyz
+  tosp <- TOSPHERE(xyz[, 1], xyz[, 2], xyz[, 3])
+  tp <- cbind(tosp[[1]]/360 * 2 * pi, tosp[[2]]/360 * 2 * pi)
+  
+  return(list(X = xxx$v,E = xxx$edge, angles = cbind(tp[,2],tp[,1]),g=g,w=w ))
+}
+# 上の出力を3Dプロットする関数
+my.plot.shape <- function(shape){
+  plot3d(shape$X)
+  segments3d(shape$X[c(t(shape$E)), ])
+}
+
+
+# r 乱雑項(0はなし、正の数がその程度)
+# h1 偏り1(heterogeneity) (0-1の値。0はすべて使う。割合1-h1の点を特定の領域に集中させる)
+# h1をh2!=0と組み合せて使うときはh1>0とすること
+# h2 偏り2。観察点の粗密を入れる。0は特定の領域に集中させる
+# h2が大きくなると、集中した場所を複数個所作る。h2<=1
+# h2.fracは使う頂点の割合
+# h2k 偏り2をコントロールする係数(デフォルト値を使うことを原則とする)
+# 返り値
+## X 乱雑項を加えた座標
+## E エッジ
+## obs.id 観察点のID
+my.spharm.jikken <- function(shape,r=0,h1=0,h2=0,h2.frac=1,h2k=4){
+  X <- shape$X + rnorm(length(shape$X))*r
+  n <- length(X[,1])
+  if(h2==0){
+    obs.n <- ceiling(n * (1-h1))
+    tmp <- c(1:n,1:n)
+    s <- sample(1:n,1)
+    obs.id <- tmp[(1:obs.n)+s]
+  }else{
+    obs.n <- ceiling(n *(1-h1))
+    obs.n2 <- obs.n * 2
+    tmp <- c(1:n,1:n,1:n,1:n)
+    s <- sample(1:n,1)
+    obs.id <- tmp[(1:obs.n2)+s]
+    #plot(obs.id)
+    tmpn <- length(obs.id)
+    pr <- h2k*(1 + cos((1:tmpn)/tmpn * pi * (1+h2*100)))
+    obs.id <- sample(obs.id,ceiling(n *h2.frac),replace=TRUE,prob=pr)
+    obs.id <- unique(obs.id)
+  }
+  return(list(X=X,E=shape$E,angles=shape$angles,obs.id=obs.id))
+}
+# 上の実験観測点をハイライトしてプロットする関数
+my.plot.ex <- function(ex,obscol=2,r=0.05){
+  plot3d(ex$X)
+  segments3d(ex$X[c(t(ex$E)), ])
+  spheres3d(ex$X[ex$obs.id,],color=obscol,radius=r)
+}
+# 上の実験観測点の分布を、単位球面上での粗密でプロットする関数
+my.plot.ex.sphere <- function(ex,obscol=2,r=0.05){
+  z <- cos(ex$angles[,1])
+  x <- sin(ex$angles[,1]) * cos(ex$angles[,2])
+  y <- sin(ex$angles[,1]) * sin(ex$angles[,2])
+  XX <- cbind(x,y,z)
+  plot3d(XX)
+  segments3d(XX[c(t(ex$E)), ])
+  spheres3d(XX[ex$obs.id,],color=obscol,radius=r)
+}
+# オリジナルの形と復元した形とを併せてプロットする関数
+# 球面調和関数係数も返す
+my.plot.oriANDest <- function(ex,obscol=1,r=0.05,L=15){
+  my.plot.ex(ex,obscol=obscol,r=r)
+  #spheres3d(ex$X,color=2,radius)
+  coef1 <- my.spcoef.est(ex$X[ex$obs.id,],ex$angles[ex$obs.id,],L)
+  ex1X.est <- my.coef2xyz(coef1,ex$angles)
+  spheres3d(Re(ex1X.est),color=2,radius=r)
+  segments3d(Re(ex1X.est)[c(t(ex$E)), ],color=2)
+  
+  return(list(coef=coef1,Xest=ex1X.est))
+}
+```
+# 実験
+
+```{r}
+# 実験回数 n.iter
+n.iter <- 10
+ds <- sample(4:8,n.iter,replace=TRUE)
+Ns <- sample(15:30,n.iter,replace=TRUE)
+rs <- runif(n.iter)*0.01
+h1s <- runif(n.iter) * 0.01
+h2s <- runif(n.iter)
+h2.fracs <- (runif(n.iter) * 0.1 + 0.9)
+Ls <- sample(15:20,n.iter,replace=TRUE)
+
+params <- cbind(ds,Ns,rs,h1s,h2s,h2.fracs,Ls)
+
+shapes <- list()
+exs <- list()
+coefs <- list()
+exX.ests <- list()
+for(i in 1:n.iter){
+  shapes[[i]] <- my.cell.shape(ds[i],Ns[i])
+  exs[[i]] <- my.spharm.jikken(shapes[[i]],r=rs[i],h1=h1s[i],h2=h2s[i],h2.frac=h2.fracs[i],h2k=10)
+  coefs[[i]] <- my.spcoef.est(exs[[i]]$X[exs[[i]]$obs.id,],exs[[i]]$angles[exs[[i]]$obs.id,],Ls[i])
+  exX.ests[[i]] <- my.coef2xyz(coefs[[i]],exs[[i]]$angles)
+}
+```
+オリジナル座標と復元座標の差の分布
+
+```{r}
+diffs <- list()
+for(i in 1:n.iter){
+  diffs[[i]] <- Re(exs[[i]]$X - exX.ests[[i]]) 
+}
+```
+
+```{r}
+stats <- sapply(diffs,function(x){summary(c(x))})
+ssd <- sapply(diffs,var)
+```
+
+```{r}
+lm(t(as.matrix(stats))~params)
+```

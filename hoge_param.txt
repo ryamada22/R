@@ -1,0 +1,1 @@
+n=5\nk=5\nn.mesh=32\nn.step=50\nscale.shift=0.1\nscale.rotation1=0.1\nscale.rotation2=0.1\nscale.shear=0.1\n

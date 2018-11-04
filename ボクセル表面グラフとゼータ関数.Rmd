@@ -1,0 +1,472 @@
+---
+title: "ボクセルの木化"
+author: "ryamada"
+date: "2018年5月13日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## 諸関数を作る
+
+### ボクセル集合
+原点を１頂点とする１辺の長さ３の立方体(*)は９個の単位立方体を寄せ集めたものである。
+
+個々の単位立方体を、その単位立方体の８頂点の一つの座標で代表させることとする。
+ただし、代表頂点はx,y,z座標が最小のものとする。
+
+```{r}
+Vox.list <- as.matrix(expand.grid(0:2,0:2,0:2))
+Vox.list
+```
+単位立方体の代表頂点を１行とした行列である。
+これが立方体(*)のボクセル集合である。
+
+### 単位立方体の面を列挙する
+
+単位立方体の代表座標から、６面を列挙する。
+
+ただし、単位立方体の面は、その４頂点座標のうち座標値が最小の頂点の座標を代表座標とし、その面の向きをの情報を加えて表すことにする。
+
+たとえば、代表座標が(u,v,w)であり、xy平面に平行な面を(u,v,w,1)と表すことにする。
+
+yz,zx平面に平行な面は、それぞれ(u,v,w,2),(u,v,w,3)とする。
+
+```{r}
+my.vox.faces <- function(xyz){
+	rbind(c(xyz,1),c(xyz,2),c(xyz,3),c(xyz+c(1,0,0),2),c(xyz+c(0,1,0),3),c(xyz+c(0,0,1),1))
+}
+
+face.example <- my.vox.faces(Vox.list[3,])
+face.example
+```
+
+### 単位面の頂点を列挙する
+
+代表座標と面の向きの情報から、その単位正方形の４頂点座標を返す関数を作る。
+
+```{r}
+my.face.nodes <- function(xyzw){
+	xyz <- xyzw[1:3]
+	w <- xyzw[4]
+	if(w==1){
+		ret <- rbind(xyz,xyz+c(1,0,0),xyz+c(0,1,0),xyz+c(1,1,0))
+	}else if(w==2){
+		ret <- rbind(xyz,xyz+c(0,1,0),xyz+c(0,0,1),xyz+c(0,1,1))
+	}else{
+		ret <- rbind(xyz,xyz+c(0,0,1),xyz+c(1,0,0),xyz+c(1,0,1))
+	}
+	return(ret)
+}
+my.face.nodes(face.example)
+```
+
+### ボクセル集合の表面を形成する面を抽出する
+
+ボクセル集合表面の単位正方形のリストを作る。
+
+すべてのボクセルの面を列挙し、そのうち、２つのボクセルにサンドイッチされた面を除いたものが、表面構成成分であることを利用して、以下のようにする
+
+行列の行を比較し、同一行がない行のみを検出し、それを抽出する関数を作る。
+```{r}
+# x は行列
+# 返り値はリストで、リストの第１要素は、同一行がない行か否かのboolean ベクトル
+# リストの第２要素は、同一行がない行を抽出した行列
+my.onlyone <- function(x){
+	n <- length(x[,1])
+	a <- !duplicated(x)
+	b <- !duplicated(x[n:1,])[n:1]
+	
+	return(list(a & b,x[a & b,]))
+}
+samplex <- matrix(c(0,0,0,1,0,1,1,1),byrow=TRUE,ncol=2)
+samplex
+my.onlyone(samplex)
+```
+
+上記の関数を用いて、ボクセルリストから、表面構成面情報を取り出す。
+
+ただし、面が立体に対してどの向きかの情報が欲しいので、以下のような出力とする。
+
+返り値はリストで、第１要素は単位正方形情報(代表座標と向き情報)。
+
+第２要素は、その面をもたらしたボクセルの代表頂点を含む面か、そうでない面かの識別情報ベクトル(0なら、代表頂点を含む、1なら含まない)
+```{r}
+my.vox.surface <- function(Vlist){
+	faces <- matrix(0,0,4)
+	
+	for(i in 1:length(Vlist[,1])){
+		faces <- rbind(faces,my.vox.faces(Vlist[i,]))
+		
+	}
+	omoteura <- rep(c(0,0,0,1,1,1),length(faces[,1]))
+	onlyones <- my.onlyone(faces)
+	#print(onlyones[[1]])
+	return(list(onlyones[[2]],omoteura[which(onlyones[[1]])]))
+}
+
+facesout <- my.vox.surface(Vox.list)
+faces <- facesout[[1]]
+faces.omoteura <- facesout[[2]]
+
+head(faces)
+
+faces.omoteura
+```
+
+### 表面頂点リストを作る
+
+各表面正方形から頂点座標を取り出し、それを全部の面について合わせて、ユニークを取ることで、表面頂点座標リストを作る。
+```{r}
+my.surface.nodes <- function(faces){
+	vs <- matrix(0,0,3)
+	for(i in 1:length(faces[,1])){
+		vs <- rbind(vs,my.face.nodes(faces[i,]))
+	}
+	return(unique(vs))
+}
+
+nodes <- my.surface.nodes(faces)
+head(nodes)
+```
+
+3Dプロットする。
+```{r, rgl=TRUE}
+library(rgl)
+plot3d(nodes)
+```
+
+### 表面頂点リストから表面四角メッシュを作る
+
+グラフ用パッケージ igraphを用いる。
+
+頂点ペアのユークリッド距離を計算し、その値が１であるものはメッシュグラフのエッジであることを利用して、隣接行列を作り、隣接行列からグラフオブジェクトを作る。
+
+ただし、頂点間距離が１ならすべてエッジなわけではなく、表面正方形のエッジであった場合に限る。
+```{r}
+library(igraph)
+my.surface.graph2 <- function(nodes){
+	d <- as.matrix(dist(nodes))
+	d <- matrix(as.numeric(d==1),ncol=length(nodes[,1]))
+	#d
+	
+}
+
+g <- graph.adjacency(my.surface.graph2(nodes),mode="undirected")
+plot(g)
+```
+# ゼータ関数
+```{r}
+library(igraph)
+library(complexplus)
+my.Ihara.zeta.elem <- function(g){
+	A <- as.matrix(as_adjacency_matrix(g))
+	n.v <- length(V(g))
+	n.e <- length(E(g))
+	r <- n.e - n.v
+	D <- diag(degree(g))
+	H <- diag(degree(g)-1) 
+	I <- diag(rep(1,n.v))
+	return(list(r=r,A=A,H=H,I=I,D=D))
+}
+my.Ihara.zeta.ori <- function(g,u){
+	elem <- my.Ihara.zeta.elem(g)
+	1/((1-u^2)^elem$r * Det(elem$I-u*elem$A + u^2*elem$H))
+}
+
+my.Bartholdi.zeta <- function(g,u,t){
+	elem <- my.Ihara.zeta.elem(g)
+	tmp <- (1-(1-u)^2*t^2)^elem$r * Det(elem$I-t*elem$A+(1-u)*(elem$D-(1-u)*elem$I)*t^2)
+	return(1/tmp)
+}
+
+my.Ihara.zeta <- function(g,u){
+	my.Bartholdi.zeta(g,0,u)
+}
+fu <- function(u){
+	tmp <- (-1)*(3*u-1)*(u+1)^5*(u-1)^6*(3*u^2+u+1)^4
+	return(1/tmp)
+}
+```
+
+```{r}
+x <- y <- seq(from=-0.8,to=0.8,length=100)
+
+xy <- expand.grid(x,y)
+xy. <- xy[,1] + 1i*xy[,2]
+
+vs <- rep(0,length(xy.))
+vs2 <- vs
+for(i in 1:length(vs)){
+	vs[i] <- my.Ihara.zeta(g,xy.[i])
+	vs2[i] <- fu(xy.[i])
+}
+my.Ihara.zeta(g,vs[55])
+fu(vs[55])
+```
+
+```{r}
+plot(xy,col=abs(Mod(vs))+1)
+
+```
+
+```{r}
+plot(Mod(vs))
+```
+グラフオブジェクトからエッジリストを取り出すのは簡単。
+
+```{r}
+edges <- t(apply(get.edgelist(g),1,sort))
+```
+
+### 単位正方形の４頂点をその順序に注意して取り出す。
+
+表面正方形をボクセル集合の外部から眺めることにする。
+
+そのときに、時計回りに４頂点をたどることとし、その４頂点ID(頂点座標行列の行番目)のベクトルを作成し、それを全正方形について実施して返す。
+
+```{r}
+my.face.nodesid <- function(faces,faces.omoteura,nodes){
+	ret <- matrix(0,length(faces[,1]),4)
+	for(i in 1:length(faces[,1])){
+		nodes.xyz <- my.face.nodes(faces[i,])
+		nodes.xyz <- nodes.xyz[c(1,2,4,3),] # 反時計回り
+		if(faces[i,4]==1){
+			if(faces.omoteura[i]==0){
+				#nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}else{
+				nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}
+		}else if(faces[i,4]==2){
+			if(faces.omoteura[i]==0){
+				#nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}else{
+				nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}
+		}else{
+			if(faces.omoteura[i]==0){
+				#nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}else{
+				nodes.xyz <- nodes.xyz[c(1,4,3,2),]
+			}
+		}
+		nodes.id <- rep(0,4)
+		for(j in 1:4){
+			tmp <- t(nodes) - nodes.xyz[j,]
+			tmp2 <- apply(tmp^2,2,sum)
+			nodes.id[j] <- which(tmp2==0)
+			ret[i,] <- nodes.id
+		}
+	}
+	return(ret)
+}
+
+face.nodes <- my.face.nodesid(faces,faces.omoteura,nodes)
+head(face.nodes)
+```
+
+### 表面正方形から表面四角化グラフを作る
+
+```{r}
+
+library(igraph)
+my.surface.graph <- function(face.nodes){
+  el <- matrix(0,0,2)
+  for(i in 1:length(face.nodes[,1])){
+    tmp <- face.nodes[i,]
+    el <- rbind(el,tmp[1:2],tmp[2:3],tmp[3:4],tmp[c(4,1)])
+  }
+	el <- t(apply(el,1,sort))
+	el <- unique(el)
+	el
+}
+
+g <- graph.edgelist(my.surface.graph(face.nodes),directed=FALSE)
+plot(g)
+```
+### 四角化グラフから木を作る
+
+木の作成には、ルートノードの指定と、ルートノードからのグラフ距離が必要なので、まずそれをする。
+
+１頂点を適当にルートとして選び、ルートから全頂点へのグラフ距離を求める。
+
+```{r}
+rootid <- 10
+
+shdist <- distances(g) # 全頂点間のペアワイズグラフ距離を算出
+
+rootdist <- shdist[rootid,] # ルートノードからのグラフ距離を抽出
+rootdist
+```
+
+木を作るにあたり、各正方形ごとに１つのエッジを以下の方法で定める。
+
+正方形の４頂点(外から見て時計回りの４頂点)に付与されたルートノードからの距離は
+
+(A) t -> t+1 -> t+2 -> t+1の順か
+
+(B) t -> t+1 -> t -> t+1 の順か
+
+のいずれかである。それは、隣接頂点の距離の値は必ず±1の違いになる仕組みになっているからである。
+
+(A) の場合には、値t+2の頂点と、時計回りの隣になる値t+1の頂点とを結んだエッジを作る。
+
+(B) の場合には、値t+1の２頂点を結んだ対角線をエッジとする。
+
+以下の複数の関数は、この処理を実行するためのものである。
+
+```{r}
+my.tree.edge <- function(vals){ # 反時計回り
+	tmp <- which(vals == max(vals))
+	if(length(tmp)==2){
+		ret <- tmp
+		#print("diagonal")
+	}else{
+		ret <- c(tmp,tmp+1)
+		if(ret[2] > 4){
+			ret[2] <- 1
+		}
+	}
+	return(ret)
+}
+
+my.tree.edge(c(1,2,3,2))
+
+my.select.face.edge <- function(nodeid,rootdist){
+	vals <- rootdist[nodeid]
+	tmp <- my.tree.edge(vals)
+	return(nodeid[tmp])
+}
+
+my.tree.edges <- function(face.nodes,rootdist){
+	tmp <- apply(face.nodes,1,my.select.face.edge,rootdist)
+	ret <- matrix(tmp,nrow=2)
+	return(t(ret))
+}
+
+tree.edges <- my.tree.edges(face.nodes,rootdist)
+head(tree.edges)
+```
+
+### 描図する
+
+表面四角化メッシュを黒で描き、
+木を赤で描き、
+ルートノードをハイライトし
+ルートノードとつながるべき、木のノードとの間に特別なエッジを加える(このエッジは「四角化グラフの木」には含まれない)。
+
+```{r}
+my.draw.surface <- function(nodes,root,edges,tree.edges=Null,axes = FALSE,radius.root = 0.1){
+	plot3d(nodes,axes=axes,xlab="x",ylab="y",zlab="z")
+	
+	
+	if(!is.null(tree.edges)){
+		tmp <- c(t(tree.edges))
+		segments3d(nodes[tmp,],col=2)
+	}
+  tmp <- c(t(edges))
+	segments3d(nodes[tmp,])
+	spheres3d(nodes[root,],col=3,radius=radius.root)
+	
+}
+
+my.draw.surface(nodes,rootid,edges,tree.edges=tree.edges)
+# ルートノードとつながるべきノードは、ルートノードからの距離が１なので
+# そのノードを取り出し、エッジで結ぶ
+one.nodes <- which(rootdist==1)
+for(i in 1:length(one.nodes)){
+	segments3d(rbind(nodes[rootid,],nodes[one.nodes[i],]),col="purple")
+}
+```
+
+## ボクセル集合から一括処理する関数に再構成する
+
+まず、ボクセル集合から、四角化グラフを作るところまで。
+```{r}
+my.vox2quad <- function(Vox.list){
+  facesout <- my.vox.surface(Vox.list) # ボクセルリストから表面正方形を列挙
+  faces <- facesout[[1]] # 表面正方形のリスト
+  faces.omoteura <- facesout[[2]] # 表面正方形の向き情報
+  nodes <- my.surface.nodes(faces) # 表面ノードのリスト
+  face.nodes <- my.face.nodesid(faces,faces.omoteura,nodes) # 表面正方形の４頂点(向き考慮)
+  g <- graph.edgelist(my.surface.graph(face.nodes),directed=FALSE) # 表面をグラフオブジェクト化
+  edges <- t(apply(get.edgelist(g),1,sort)) # 表面エッジリスト  
+  return(list(Vox.list=Vox.list,faces=faces,faces.omoteura=faces.omoteura,nodes=nodes,g=g,edges=edges,face.nodes=face.nodes))
+}
+
+quad <- my.vox2quad(Vox.list)
+```
+
+次に、四角化グラフに対して、ルートノードを与えて木を作るまで。
+
+```{r}
+my.quad2tree <- function(quad,rootid){
+  shdist <- distances(quad$g) # 全頂点間のペアワイズグラフ距離を算出
+  rootdist <- shdist[rootid,] # ルートノードからのグラフ距離を抽出
+  tree.edges <- my.tree.edges(quad$face.nodes,rootdist) # 木構成エッジ
+  return(list(quad=quad,tree.edges=tree.edges,rootid=rootid,rootdist=rootdist,shdist=shdist))
+}
+rootid <- 20 # ルートノードIDを適当に指定
+tr <- my.quad2tree(quad,rootid)
+```
+
+結果を描画。
+```{r}
+my.draw.surface.tree <- function(tr,axes = FALSE,radius.root = 0.1){
+  plot3d(tr$quad$nodes,axes=axes,xlab="x",ylab="y",zlab="z")
+	#tmp <- c(t(tr$quad$edges))
+	#segments3d(nodes[tmp,])
+	if(!is.null(tr$tree.edges)){
+		tmp <- c(t(tr$tree.edges))
+		segments3d(tr$quad$nodes[tmp,],col=2)
+	}
+	tmp <- c(t(tr$quad$edges))
+	segments3d(tr$quad$nodes[tmp,],col=gray(0.5))
+	spheres3d(tr$quad$nodes[tr$rootid,],col=3,radius=radius.root)
+	one.nodes <- which(tr$rootdist==1)
+  for(i in 1:length(one.nodes)){
+  	segments3d(rbind(tr$quad$nodes[tr$rootid,],tr$quad$nodes[one.nodes[i],]),col="purple")
+  }
+}
+my.draw.surface.tree(tr)
+```
+
+## 適当にボクセルリストを作って、使ってみる
+```{r}
+n.step <- 1000
+#xxx <- matrix(rep(0,3),ncol=3)
+xxx <- as.matrix(expand.grid(-1:1,-1:1,-1:1))
+for(i in 1:n.step){
+  pr <- apply(xxx^2,1,sum)
+	r <- sample(1:length(xxx[,1]),1,prob=pr+0.1)
+	#p <- sample(1:3,1)
+	tmp <- xxx[r,]
+	p <- sample(1:3,1)
+	if(runif(1)<0.5){
+	  p <- order(tmp)[2]
+	}
+	
+	tmp[p] <- tmp[p] + 1
+	xxx <- rbind(xxx,tmp)
+	xxx <- unique(xxx)
+}
+Vox.list <- unique(xxx)
+quad <- my.vox2quad(Vox.list)
+rootid <- 10
+tr <- my.quad2tree(quad,rootid)
+```
+```{r}
+my.draw.surface.tree(tr)
+```
+
+ルートノードからの距離に応じてノードに色を付けてみる。
+
+```{r}
+for(i in 1:length(tr$quad$nodes[,1])){
+  # グラフ距離を適当倍して大雑把にカラースケールが現れるようにする
+  d <- floor(tr$rootdist[i] * 0.3) +1 
+  #print(d)
+  spheres3d(tr$quad$nodes[i,],col=d,radius=0.1)
+}
+```

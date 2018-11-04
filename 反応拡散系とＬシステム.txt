@@ -1,0 +1,185 @@
+１次元シミュレーション。拡散。反応拡散
+http://d.hatena.ne.jp/ryamada/20160706/1467793436　
+２次元シミュレーション。パターン形成
+http://d.hatena.ne.jp/ryamada/20170302
+L-systemで遊ぶ
+# パターンは単純なルールで出来ている　L system
+https://ja.wikipedia.org/wiki/L-system 
+http://www.kevs3d.co.uk/dev/lsystems/ 　
+
+
+# 部屋の数
+n <- 1000
+# 追跡時刻数
+n.t <- 1000
+# 砂の量を記録する行列
+X <- matrix(0,n.t,n)
+# 初期時刻の砂の量(高さ)をところどころに与える
+# m箇所に砂がある
+m <- n/10
+# 砂のある場所
+X[1,10:50] <- 10
+X[1,200:300] <- 100
+X[1,500:800] <- 50
+# 隣の部屋へは、delta.t * D の割合で移動する
+delta.t <- 1
+D <- 0.4 # D は0.5以下
+for(i in 2:n.t){
+	# t = iの部屋の砂の量を仮に決める
+	tmp <- X[i-1,]
+	# 全部の部屋の砂の移動を、一部屋ずつ処理する
+	for(j in 1:n){
+		to.Left <- delta.t * D * X[i-1,j]
+		to.Right <- delta.t * D * X[i-1,j]
+		# 自分の部屋の砂は減る
+		tmp[j] <- tmp[j] - to.Left - to.Right
+		# 左隣の部屋は増える
+		if(j-1 >= 1){
+			tmp[j-1] <- tmp[j-1] + to.Left
+		}
+		# 右隣の部屋は増える
+		if(j+1 <= n){
+			tmp[j+1] <- tmp[j+1] + to.Right
+		}
+	}
+	X[i,] <- tmp
+}
+
+image(X)
+
+#par(ask=TRUE)
+for(i in 1:n.t){
+	plot(1:n,X[i,],ylim = c(0,max(X)),type="l")
+}
+
+# XとYとがある
+
+
+# 部屋の数
+n <- 1000
+# 追跡時刻数
+n.t <- 3000
+# 砂の量を記録する行列
+X <- Y <- matrix(0,n.t,n)
+# 初期時刻の砂の量(高さ)をところどころに与える
+# m箇所に砂がある
+m <- n/10
+# 砂のある場所
+X[1,10:50] <- 1
+X[1,200:300] <- 10
+X[1,500:800] <- 5
+
+Y[1,] <- 0.5
+
+# 隣の部屋へは、delta.t * D の割合で移動する
+delta.t <- 1
+Dx <- 0.4
+Dy <- 0.2
+
+for(ii in 2:n.t){
+	# まず反応
+	# 部屋ごとに反応
+	new.X <- X[ii-1,]
+	new.Y <- Y[ii-1,]
+	for(j in 1:n){
+		delta.X <- 0.05*X[ii-1,j] - 0.06*Y[ii-1,j]*X[ii-1,j]
+		delta.Y <- 0.06*X[ii-1,j]*Y[ii-1,j] - 0.07*Y[ii-1,j]
+		#delta.X <- 0
+		#delta.Y <- 0
+		new.X[j] <- new.X[j] + delta.X
+		new.Y[j] <- new.Y[j] + delta.Y
+	}
+
+	# 次に拡散
+
+	tmpX <- new.X
+	tmpY <- new.Y
+	# 全部の部屋の砂の移動を、一部屋ずつ処理する
+	for(j in 1:n){
+		to.LeftX <- delta.t * Dx * new.X[j]
+		to.RightX <- delta.t * Dx * new.X[j]
+
+		to.LeftY <- delta.t * Dy * new.Y[j]
+		to.RightY <- delta.t * Dy * new.Y[j]
+
+		# 自分の部屋の砂は減る
+		tmpX[j] <- tmpX[j] - to.LeftX - to.RightX
+		tmpY[j] <- tmpY[j] - to.LeftY - to.RightY
+		# 左隣の部屋は増える
+		if(j-1 >= 1){
+			tmpX[j-1] <- tmpX[j-1] + to.LeftX
+			tmpY[j-1] <- tmpY[j-1] + to.LeftY
+		}
+		# 右隣の部屋は増える
+		if(j+1 <= n){
+			tmpX[j+1] <- tmpX[j+1] + to.RightX
+			tmpY[j+1] <- tmpY[j+1] + to.RightY
+		}
+	}
+	X[ii,] <- tmpX
+	Y[ii,] <- tmpY
+}
+#par(ask=TRUE) # 時刻を一つずつ追いかけたいときはこの行のコメントを外す
+for(i in 1:n.t){
+	matplot(1:n,cbind(X[i,],Y[i,]),ylim = c(0,max(c(X,Y))),type="l")
+}
+# はっきり見えるように対数を取る
+# 対数を非負の数にするために1を足してから対数をとる
+image(log(X+1),col=topo.colors(100),main="X",xlab="time",ylab="location")
+
+image(log(Y+1),col=topo.colors(100),main="Y",xlab="time",ylab="location")
+
+###########
+a <- 2.8 * 10^(-4)
+b <- 5 * 10^(-3)
+tau <- 0.1
+k <- -0.005
+
+size <- 100
+dx <- 2/size
+T <- 10.0
+dt <- 0.9 * dx^2/2
+n <- floor(T/dt)
+
+U <- matrix(runif(size^2),size,size)
+V <- matrix(runif(size^2),size,size)
+
+ctr <- 2:(size-1)
+plus <- 3:size
+minus <- 1:(size-2)
+
+U.hx <- list()
+V.hx <- list()
+U.hx[[1]] <- U
+V.hx[[1]] <- V
+for(i in 1:n){
+  deltaU <- (U[minus,ctr] + U[plus,ctr] + U[ctr,minus] + U[ctr,plus] - 4 * U[ctr,ctr])/(dx^2)
+  deltaV <- (V[minus,ctr] + V[plus,ctr] + V[ctr,minus] + V[ctr,plus] - 4 * V[ctr,ctr])/(dx^2)
+  
+  Uctr <- U[ctr,ctr]
+  Vctr <- V[ctr,ctr]
+  
+  new.U <- U
+  new.V <- V
+  new.U[ctr,ctr] <- Uctr + dt * (a*deltaU + Uctr - Uctr^3 -Vctr + k)
+  new.V[ctr,ctr] <- Vctr + dt * (b*deltaV + Uctr - Vctr)/tau
+  
+  new.U[1,] <- new.U[2,]
+  new.U[size,] <- new.U[size-1,]
+  new.U[,1] <- new.U[,2]
+  new.U[,size] <- new.U[,size-1]
+  new.V[1,] <- new.V[2,]
+  new.V[size,] <- new.V[size-1,]
+  new.V[,1] <- new.V[,2]
+  new.V[,size] <- new.V[,size-1]
+  U <- new.U
+  V <- new.V
+  
+  #U.hx[[i+1]] <- U
+  #V.hx[[i+1]] <- V
+  
+  if(i%%5000 == 1){
+		image(U,col=topo.colors(100))
+	}
+}
+

@@ -1,0 +1,150 @@
+---
+title: "Fujii-san"
+author: "ryamada"
+date: "2018年2月8日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ICFSを土台にするが、主眼を大きく変える。理論系にすることで、実働労力を絞る。
+
+"PRE" はICFSの記載
+
+"POST" はアルハンブラ宮殿の記載
+
+## PRE Morphological characterization of three-dimensional shapes with curvature flow-based spin transformation and spherical harmonics decomposition
+
+### PRE Short title: Characterizing 3D shapes with spin transformation
+
+を、座標の貼り付けに変更して書く。
+
+# POST Mapping of polar coordinate system on S2 isomorphic object shape via Willmore energy flow based spherization
+
+###  PRE Abstract
+
+Parameterizing the shape of objects is an important topic in three-dimensional data-processing research. However, systematic and data-driven evaluation of three-dimensional shapes such as cellular shapes is difficult. Here, we describe the workflow of feature extraction based on mathematically robust procedures: conformal spin transformation, spherical harmonics decomposition, and shape difference under rotation invariance. Our analysis of the simulation dataset shows that the method appropriately classifies triangulated objects according to shape complexities.
+
+### POST Abstract
+
+3D物体の形、特にS2同相の形の解析は重要だ。
+形の変化、形上の点・領域の配置・分布の解析を行うには、形表面に座標系が導入できると有用である。殊に、その座標系が任意の形に対して単一の手法で導入できればその有用性は高い(その座標を用いて数学的に解析的に取り扱うことが可能になる、と言う意味で)。我々は、数学的に一意で安定な処理を組みあわせ、任意の三角メッシュ化S2同相オブジェクトに極座標系を与える方法を以下のように提案する。(1) Spin transformation (平均曲率のWillmore energy flow)により、三角化メッシュをconformalに単位球面にマップする、(2) 単位球面にマッピングしたオブジェクトの3D座標が作る球面上の3関数を球面調和関数分解する、(3) スタンフォードバニー(SB)を基準オブジェクトとして採用し、対象オブジェクトとSBとのxxxxによる形違いmeasureを最小にする回転を、単位球面上の3関数の球面調和関数分解スペクトルを利用した固有値分解を介してdeterministicに求めること、(4) SBの鼻先に対応する単位球面上の点を北極に、SBの左耳先に対応するそれを通る子午線の経度を0度と定めることで、任意の形に対応する単位球面上の極座標系を一意に定める、(5) オリジナルの形表面に単位球面上の座標系を逆マップする。
+
+# POST イントロダクション
+
+形上の位置を取り扱ういろいろを調べて整理して記述する
+
+既報の手法については概説する。
+
+# POST Methods ここがメイン 
+
+理論系のペイパーであることを主張するべく、数式を使って端的に書く。
+
+# 応用例
+
+SB(の適当な細かさの三角メッシュ)を球化してみせる。
+球面調和関数分解して復元してみせる(復元がしょぼければ、少し考えて、アピーリングにする対策を練る)。
+鼻先・耳先ルールで緯線経線を単位球面に描く。
+その緯線経線をオリジナルSBに描く。
+
+石井研細胞とかミシガン大細胞とかを持ってきて、上記を実施して提示する。
+
+# Discussion
+
+提案手法の一意・安定性・数学ベースを強調する。
+座標貼り付けをすることの有用性を述べる。物体表面上の点の運動が座標変化として記載できる。そこに、オブジェクトの上に張り付いている曲率行列(リーマン計量)を加味すると長さも扱える。
+局所領域の変化も同様に扱える。
+形の対称性・極性などについても座標を用いて表現できる。
+
+オブジェクトの上では測地線があり、それは貼り付けた極座標系の上では曲線として表されるが、その曲がり具合を定量的に扱うこともできる。
+
+などが考えられる。
+
+1	Introduction
+The parameterization of an object and its surface is an important part of three-dimensional (3D) data-processing research [L. Shen, 2006]. Mathematical theories in the fields of differential geometry and quantum mechanics help us to parameterize and better understand 3D objects. With the development of imaging technology, the morphologic quality and quantity of data are increasing. In the life sciences, the development of microscopic imaging technology is leading to great advances in biomedical research [K. Zagorovsky, 2013].
+Traditional and current analysis methods of cell shapes are mostly based on two-dimensional (2D) cross-sections through the center of cells or their area, surface, and outline [Yoshikazu O, 2005], and on human-scoring features  [Anne E Carpenter, 2006]. Although handling cells as 2D entities has proven effective in understanding and interpreting some aspects of cells and in identifying defects in a variety of mutants, a lack of information of the third dimension can cause misconceptions [Soll DR, 2003][Rajagopal R, 2008][Du C, 2013]. Clearly, a 2D section is missing 3D aspect and information. Moreover, human-scoring features are qualitative and some properties may be undetected [Anne E Carpenter, 2006]. In contrast, automated analysis of sequential 2D images gives us quantitative features or variables from input images [Anne E Carpenter, 2006] [Ohtani M, 2004], and is able to measure features that are undetectable to the human eye [Guillaud M]. However, analyzing 3D images is currently difficult because multiple combinations of features or variables do not generally recover the full information of a 3D shape [Ian L. Dryden, 2016].
+In the field of computer vision, researchers have introduced some 3D shape representation techniques. In particular, mapping to sphere and feature extraction using spherical harmonics decomposition are frequently used basic methods [Brechbuhler, 1996][L. Shen, 2006]. Spherical harmonics describes a set of orthogonal units and is used in mathematics, physics, and quantum mechanics to expand functions defined on a sphere to a nonspherical domain. The original surface is completely represented using a set of coefficients from spherical harmonics mathematically. This representation form helps us to render the objects described by voxels or triangulation/quadratic mesh surfaces. In medical contexts, this approach is applied in radiology fields such as computed tomography and magnetic resonance imaging (MRI) to represent coordinates in space, that is, the position f(θ,??)=(x(θ,??),y(θ,??),z(θ,??))^T denoted by the angular set (θ,??) in a polar coordinate system. The traditional approach to 3D objects was to represent the coordinates of vertices with the expansion of spherical harmonics c_l^m=(c_lx^m,c_ly^m,c_lz^m )^T for simple objects that can be expressed uniquely by a polar coordinate system, such as cardiac ventricles [Huang H, 2011] and the liver [Mofrad F, 2014].
+To represent surfaces with spherical harmonics, a given surface must be mapped one-to-one on a sphere. However, this technique is a challenge because geometrical distortions are inevitable during the mapping [M. Floater, 2005]. When a given surface M1 is mapped to another surface M2, distortions can occur, typically in the length, angle, and area. To minimize this distortion, Brechbuhler [Brechbuhler, 1996] developed area preservation mapping using a mathematical optimization procedure, but this is limited to moderately sized vertices, and area preservation mapping of larger objects also requires mesh editing [M. Quicke, 2000]. To preserve the properties of the original object, conformal, or angle preserving, mapping is another strategy [H. Li, 2005][X. Gu, 2003]. [K. Crane, 2011] [K. Crane, 2013] introduced conformal mapping, which uses mathematical one-to-one mapping, preserves the surface geometry as conformal, and is computationally rapid. These properties seem to preserve their suitability for analyzing complex shapes.
+In this paper, we show a data-driven and feasible analytical workflow for obtaining object shapes by various experimental techniques, without using prior landmarks, templates, hypotheses, or models.
+2	Material and Algorithms
+2.1	Discrete 3D Surface Object
+A discrete 3D object on a computer is defined by the set of vertices V and triangular mesh facet F. 3D objects are assumed to be closed (without holes on their surface) and genus zero (not a donut-like shape or torus). We generated a simulation dataset of cell-like shapes as follows. A sphere f (θ, ??) was defined in a polar coordinate system, and its uniformly distributed vertices were generated using a Fibonacci lattice [Gonzalez, 2009]. Its radial r (θ, ??) was given by the summation of product of spherical harmonics Y_l^m (θ,??) and corresponding random generated coefficients c_l^m,
+r(θ,??)=∑_(l=0)^L???∑_(m=-l)^l???c_l^m  Y_l^m (θ,??),
+where L is the degree parameter. New vertices were reconstructed according to r (θ, ??). Closed form and genus zero shapes were extracted, and each shape was then sheared without crushing its surface. The simulation code is available in [Yamada, 2016]
+2.2	Conformal spin transformation and mapping to sphere
+Object surfaces are parameterized to be compared with each other, but complex object structures that contain inclusions and protrusions have the problem that mapping of the surface points does not result in a one-to-one map [Brechbuhler, 1996]. Robust fairing, or spin transformation, is one method of transforming an object into a sphere according to curvature flow [K. Crane, 2011][K. Crane, 2013]. This method is a conformal (angle preserving) transformation to reduce the distortion and does not require polar coordinates to start the transform [Brechbuhler, 1996].
+Spin transformation transforms the object’s surface M into a sphere S without distorting its surface structure. This problem is so highly nonlinear that solving it requires iterative steps. Newly transformed vertices correspond to each step, and the original shape and transformed sphere are then completely one-to-one mapped while preserving the angles of the surface’s triangles. The mathematical theory and implementation of this method are described by Crane [K. Crane, 2013][K. Crane, 2011].
+Spin transformation is a form of differential equation of the surface potential, or Willmore energy  [Murray, 2014]. Willmore energy is defined on a closed surface and describes how much the surface is deviated from a sphere [Bobenko, 2005]. Twisted, stretched, and folded surfaces will have much higher Willmore energy. The Willmore energy Ew(M) is given as
+E_w (M)=∫_M??????H^2 dA???,
+where H is mean curvature. Spin transformation is an approximation of the fully nonlinear Willmore flow:
+M ??=-∇E_w (M).
+2.3	Spherical harmonics decomposition
+Spherical harmonics are special mathematical functions defined on the surface of a sphere. Let S denote a unit sphere embedded in R3, and f (θ, ??) denote a function on the surface of S, where θ is the polar angle and ?? is the azimuthal angle, respectively.
+Any f (θ, ??) sphere function can be expanded by an infinite series of spherical harmonics Y_l^m (θ,??) and its coefficients c_l^m as follows:
+f(θ,??)=∑_(l=0)^∞???∑_(m=-l)^l???c_l^m  Y_l^m (θ,??),
+c_l^m=∫_(-π)^π???d?? ∫_0^π???dθsinθ f(θ,??) Y_l^m (θ,??).
+For a discrete surface described by a triangular mesh, we use a discrete description c ??_l^m,
+c ??_l^m=∑_(F∈S)?????????〈f(θ,??),Y???_l^m (θ,??)〉??? ΔA,
+where ΔA is an infinitesimal area on the surface of unit sphere S, and 〈*,*〉 is the inner product.
+A larger degree l is associated with a more accurate approximated surface parametarization. In previous studies, a set of 15 degree spherical harmonics succeeded in representing the whole shape of a liver [Mofrad F, 2014] and 20 fine cell structures [Du C, 2013].
+
+2.4	Comparison of shapes considering rotation
+We compare two shapes M_1M1 and M_2M2 with their c ??_1{\hat{clm_1} and c ??_2{\hat{clm_2}} with the measure D(M_1,M_2)D(xxxx) defined in [Gerig G., 2001][Huang H, 2011] as follows:
+D(M_1,M_2 )=(∑_(f∈x,y,z)???∑_(l=0)???∑_(m=-l)^l???(c ??_1-c ??_2 )^2 )^(1/2).
+Because spherical harmonics depends on the position in space and on the angle parameters θ and ??, considering the rotation variant is crucial for a comparison of different shapes.
+Althloothi [Althloothi S, 2013] proposed a robust analytical optimization using a quaternion and symmetrical matrix. A set of xyz coordinates was decomposed by spherical harmonics as c ??_lk^m=(c_(???lx???_k)^m,c_(ly_k)^m,c_(lz_k)^m )^T. With a given set of rotated spherical harmonics coefficients pk and their reference set wk, the optimal rotation matrix is solved by minimizing the equation below:
+min┬(R∈SO(3))a???∑_(k=1)^(N_b)???∥R(p_k )-w_k ∥^2 .???
+Minimization of the equation above is equivalent to maximizing the equation below, according to [Althloothi S, 2013]:
+a???∑_(k=1)^L??????R(p_k )???w_k ???.???
+The use of cross-covariance between pk and wk and its eigenvalue decomposition provides us with the mathematical solution for the equation above. The cross-covariance matrix for pk and wk, denoted as Σ, is
+Σ=∑_(k=0)^(N_b)??????(p_k-p ??_k ) (w_k-w ??_k )^T ???  
+where p ??_k and w ??_k are the mean of pk and wk for xyz, respectively. Then, a 4×4 symmetrical matrix Q(Σ) is constructed as
+Q(Σ)=[■(tr(Σ)&???^T@???^T&Σ+Σ^T-tr(Σ)×I_3 )],
+where Δ = [A23, A31, A12], I3 is an identity matrix, and Q(Σ) is a 4×4 symmetrical matrix with an eigenvalue decomposition of four eigenvalues λ and corresponding eigenvectors e. The rotation quaternion can be written with these as follows:
+q=λ_1 e_1+λ_2 e_2+λ_3 e_3+λ_4 e_4.
+The rotation and maximizing equation is equivalent to the following equation:
+ q ??λq=λ_1 α_1^2+λ_2 α_2^2+λ_3 α_3^2+λ_4 α_4^2,
+and when α1 = 1, maximum optimization is achieved [Horn]. The optimal rotation matrix Rxyz and global minimum distance between the pair of spherical harmonics coefficients Dmin(M1,M2) are estimated by using the following pseudocode.
+
+Pseudocode
+Input: closed surface object M(V,E)∈R3
+Output: distance matrix for every pair of input objects Dmin(M1,M2)
+1. Normalization by volume
+M ??←M
+2. Unit sphere mapping by conformal spin transformation
+S(θ,??)←M ??
+3. Set spherical harmonics degree l
+L_max←l
+4. Spherical harmonics decomposition of function value on sphere S and its corresponding coordinate N
+f(θ,??)=∑_(l=0)^(L_max)???∑_(m=-l)^l???c ??_l^m  Y_l^m (θ,??)
+5. Construct quaternion 4×4 cross-covariance matrix
+Q(Σ)←???(c ?????_1,c ??_2)
+6. Solve eigenvalue decomposition
+λ←Q(Σ)
+7. Get optimized minimum distance
+q←λ
+D_min (M_1,M_2 )←q
+
+3	Result and Discussion
+We generated 11 cell-like closed surface objects and 5 corresponding sheared shapes for feasibility analysis. All objects were successfully transformed into spheres by conformal spin transformation. Conformal mapping preserved the surface pattern of all objects depicted by the mean curvature of their surface (Fig. 1).
+After conformal spin transformation of the objects, their original Cartesian coordinates were decomposed into spherical harmonics coefficients. Then, the global minimum distance Dmin(M1,M2) between the pair of spherical harmonics coefficients, or original objects, were computed, which generated the distance matrix and clustering of the object shapes. We used a clustering tree to classify all object shapes into clusters (Fig. 2).
+Parameterizing a 3D shape is a challenging step in imaging analysis because it is important to capture the shape’s properties without losing any information necessary for computer analysis. Thus, a key step for parameterization of the shape is mapping it to a sphere and representing it with spherical harmonics. This mapping and representation technique is often used in neurological and radiological bio-imaging research fields. For example, similarities of ventricles for monozygotic and dizygotic twins in MRI are analyzed with spherical harmonics. The traditional parameters of size and volume cannot distinguish between monozygotic and dizygotic twins, whereas the difference of spherical harmonics coefficients can [Gerig G., 2001]. However, because objects are located in 3D space, any possible rotation should be considered for shape alignment. Neurological images in MRI have regular positions for anatomical landmarks, which facilitate the alignment of shapes using the first ellipsoid of spherical harmonics coefficients. Spherical harmonics are rotated by Wigner’s D-matrix in Euler angles, but this rotation procedure generally involves aligning the principal component axes [M. Chaouch, 2009] and a greedy search method [Huang H, 2011][R. Pan, 2013], which do not necessarily find the optimized rotation, and this approach is computationally costly. [Kazhdan M, 2003] proposed rotation invariant descriptors for spherical harmonics. The set of descriptors is a degree l-wise norm and is invariant at any rotation. This procedure is unique to spherical harmonics coefficients; however, the difference between the pair of coefficients is a lower bound for the minimum of the L2-difference between the two functions, which underestimates the true difference. In the case of the decomposition of xyz coordinates, [Althloothi S, 2013] presented a theoretical solution to the optimization problem of the distance between spherical harmonics coefficients. This method applies a quaternion form to represent a shape with rotation of Cartesian coordinates in 3D space and eigenvalue decomposition of the cross-covariance matrix by comparing spherical harmonics coefficients, guaranteeing theoretical optima.
+Although the relative difference between shapes has been mathematically and robustly measured, and statistically significant shape clustering has been successful, intuitive feature interpretation of shapes through sets of spherical harmonics has been difficult [G. Gerig, 2001]. The statistical features from human-designed landmarks are easy to handle and interpret because they depend only or mostly on the properties on which we are focusing, whereas all of the spherical harmonics coefficients can be changed according to a local change in the geometry of the shape [Yushkevich, 2003], which makes it complex to capture and interpret what high-dimensional dataset of spherical harmonics coefficients represents the shapes.
+3D shape analysis traditionally has not handled 3D objects well, and the procedures have not been objective and mathematically robust, but have instead depended on subjective human observation. Our workflow ensures mathematically robust, computationally rapid, data-driven, and comprehensive shape analysis of 3D objects.
+
+Figures
+Fig. 1	Conformal spin transformation. The original shape was transformed into a sphere preserving the angles on its surface. The surface pattern with positive (blue) and negative (red) mean curvature was determined by one-to-one mapping.
+ 
+
+Fig. 2	Clustering of 55 object shapes according to the pair-wise distance Dmin(M1,M2).
+ 
+
+Fig. 3	Representative object shapes for each cluster. Colored surface areas correspond to negative mean curvature, and black surface areas to positive mean curvature.
+
+ 

@@ -1,0 +1,255 @@
+---
+title: "Y chromosome"
+author: "ryamada"
+date: "2018年3月4日"
+output: html_document
+---
+
+# 問題設定
+
+
+Y染色体は基本的に(あるけど、ないと考えられる部分がほとんど)組み換えの無い染色体なので、そのハプロタイプは非常に多様。
+
+
+世界にY染色体がN本あるとする。
+
+それが全部でK種類のハプロタイプになっていて、$N = \sum_{i=1}^K n_i$となっている。
+
+今、ランダムに$X$本のY染色体を抽出し、そのハプロタイプを決定したところ、全部で$k$種類あって、その内訳が、$X = \sum_{i=1}^k x_i$になっていたという。
+
+$X$本の観測データから、$N = \sum_{i=1}^K n_i$を推定したい。
+
+ただし、$K$も未知である。
+
+# $K$が未知であること
+
+$K$が既知であるなら、この推定は特に難しいことはない。
+
+$K$が未知であるとすると、$k \le K \le N-n + k$ の範囲で不明である。
+
+実際、この問題は難しいのであるが、STANを使うとどうできるかを確認してみよう。
+
+# STAN
+
+* $K$を一様分布にしてみよう(これも仮定だが)
+* ある $K=\kappa$のもとで、$P_\kappa = \{p_1^\kappa,p_2^\kappa,...,p_\kappa^\kappa\};\sum_{i=1}^\kappa p_i^\kappa = 1$ はディリクレ分布に従うとしよう。ただし、STANのディリクレ乱数は遅いので、その代わりに、$P_\kappa$にSimplex変数制約を課した上で、$P_\kappa$にはExponential 乱数を使う、という手がある(Yusri/Koyama チームの進捗、参照)
+* このSTAN条件のもとで、次の事後分布を推定せよ
+  + ある$N$と、ある観察データセット$X = \sum_{i=1}^k x_i;X \le N$の下で、これまでに未観察のタイプが$X+1$本目に観察される確率の期待値の事後分布を求めよ。ただし、$k=K$となっていた場合には、$X$本の観察ですでに未観察タイプは存在していないから、そのような場合には、確率の期待値は0であることに注意せよ
+  + また、$K$の事後分布を示せ
+  + また、同一の$X$の下で、$N$を変化させ、$X+1$本目が未知タイプである確率の期待値と$K$とがどのように変化するかを示せ
+
+# 正確確率バージョン
+
+この問題は解析的に解けないのではないかと考えている。それがSTANを使う理由である。
+
+解けないことについて、考えを巡らせるためのメモがこの節である。STANの実施にあたって、この節を読む必要はない。
+
+ただし、小規模な場合にSTANの結果が、この正確確率の結果とどのような関係になるのかは、興味がある。
+なぜならば、STANの条件での事前モデルと、この正確確率での事前モデルの異同について情報を与えるからである。
+
+さて。
+
+比較的小さい$N,K,X,k$について正確確率を計算してみたい。
+
+$N$の下で、$K=\{1,2,...,N\}$のすべてを考慮することにする。
+
+また、$N,K=\kappa$のもとで、$N = \sum_{i=1}^\kappa n_i$を満足する、すべての自然数列$n_1,...,n_\kappa \ge 1$を考慮することにする。
+
+これは、言い換えれば、$N,K=N$のもとで、$N = \sum_{i=1}^N n_i$を満足する、すべての整数列$n_1,...,n_\kappa \ge 0$を考慮することにすることと同じである。
+
+## 整数分割
+
+まずは、Rにて整数分割をハンドリングする。
+整数分割が列挙される。
+
+```{r}
+library(partitions)
+N <- 4
+prts <- parts(N)
+prts
+```
+
+今、ある観察$(x_1,x_2,x_3,x_4)=(2,1,0,0)$があったとき、$x_i$の大小順序と$n_j$の大小順序が同じであるとは限らないから、$X!=4!$の全通りについて、検討することにする。
+
+```{r}
+X = c(2,1,0,0)
+library(gtools)
+prms <- permutations(N,N)
+prms
+```
+
+## 尤度
+
+すべての場合の尤度を計算してみる。
+
+```{r}
+my.all.perm.like <- function(N,X){
+  if(length(X) < N){
+    X <- c(X,rep(0,N-length(X)))
+  }
+  prts <- parts(N)
+  prms <- permutations(N,N)
+  ret <- matrix(0,length(prms[,1]),length(prts[1,]))
+  for(i in 1:length(prms[,1])){
+    prms.X <- X[prms[i,]]
+    for(j in 1:length(prts[1,])){
+      #print("prms.X,prts")
+      #print(prms.X)
+      #print(prts[,j])
+      if(any((prts[,j] - prms.X) < 0)){
+        tmp <- -Inf
+      }else{
+        tmp <- lfactorial(sum(X)) - sum(lfactorial(X))
+        for(k in 1:N){
+          tmp <- tmp + lchoose(prts[k,j],prms.X[k])
+        }
+      }
+      #print(tmp)
+      ret[i,j] <- tmp
+    }
+  }
+  return(list(prms,prts,ret))
+}
+```
+
+```{r}
+N <- 1
+X <- c(0)
+out1 <- my.all.perm.like(N,X)
+```
+
+```{r}
+N <- 3
+X <- c(1,0,0)
+out2 <- my.all.perm.like(N,X)
+exp(out2[[3]])
+```
+
+```{r}
+N <- 4
+X <- c(1,0)
+out2 <- my.all.perm.like(N,X)
+exp(out2[[3]])
+```
+
+## 未観測アレルを観測する確率
+
+全ての場合の列挙が済んだので、与えたXの条件で、次に出るものが、未観測になる確率を計算してみる
+
+```{r}
+my.new.allele <- function(N,X){
+  if(length(X) < N){
+    X <- c(X,rep(0,N-length(X)))
+  }
+  out <- my.all.perm.like(N,X)
+  prms <- out[[1]]
+  prts <- out[[2]]
+  ret <- out[[3]]
+  ret2 <- out[[3]]
+  for(i in 1:length(ret[,1])){
+    for(j in 1:length(ret[1,])){
+      tmp.X <- X[prms[i,]]
+      tmp.N <- prts[,j]
+      residual <- tmp.N - tmp.X
+      zero <- which(tmp.X==0)
+      ret2[i,j] <- sum(residual[zero])/sum(residual)
+    }
+  }
+  ret3 <- exp(ret) * ret2 / sum(exp(ret))
+  return(list(prms=prms,prts=prts,ret=ret,ret2=ret2,ret3=ret3,ret4=sum(ret3)))
+}
+```
+```{r}
+N <- 4
+X <- c(1,0,0,0)
+out3 <- my.new.allele(N,X)
+out3
+```
+```{r}
+N <- 5
+X <- c(2,1,1,0)
+out3 <- my.new.allele(N,X)
+out3$ret4
+```
+
+# 尤度
+
+```{r}
+# (n1,...,nK) から (x1,...,xK)が取られる確率
+
+my.choose <- function(n){
+	lfactorial(sum(n))-sum(lfactorial(n))
+}
+
+my.multi.selection <- function(n,x,log=TRUE){
+	if(any(n-x<0)){
+		if(log){
+			return(-Inf)
+		}else{
+			return(0)
+		}	
+	}
+	ret <- - my.choose(c(sum(n)-sum(x),sum(x)))
+	for(i in 1:length(n)){
+		ret <- ret + my.choose(c(n[i]-x[i],x[i]))
+	}
+	if(log){
+		return(ret)
+	}else{
+		return(exp(ret))
+	}
+}
+
+exp(my.choose(c(3,2)))
+my.multi.selection(c(1,2),c(1,0),log=FALSE)
+
+library(gtools)
+my.multi.selection.unlabel <- function(n,x,log=FALSE){
+	N <- length(n)
+	prms <- permutations(N,N)
+	x.prms <- matrix(x[prms],ncol=length(prms[1,]))
+	x.prms <- unique(x.prms)
+	ret <- rep(0,length(x.prms[,1]))
+	for(i in 1:length(ret)){
+		ret[i] <- my.multi.selection(n,x.prms[i,],log=TRUE)
+	}
+	ret.all <- log(sum(exp(ret)))
+	if(log){
+		return(list(p=ret.all,ps=ret))
+	}else{
+		return(list(p=exp(ret.all),ps=exp(ret)))
+	}
+}
+
+my.multi.selection.unlabel(c(1,2),c(1,1))
+
+# 検算
+# 総数 sum(n)に対して、nの内訳になっているときに
+# N個を取り出すことを考える
+# N個の内訳がどうなるかは整数分割でパターン分けできる
+# どの内訳がどのくらいの確率でおきるかを計算する
+# そべの内訳パターンの生起確率を足し合わせると1になることを検算する
+
+library(partitions)
+n <- sample(0:4,6,replace=TRUE)
+N <- sample(1:(sum(n)-1),1)
+prts <- parts(N)
+if(length(n)>N){
+	prts <- rbind(prts,matrix(0,length(n)-N,length(prts[1,])))
+}
+
+prr <- rep(0,length(prts[1,]))
+for(i in 1:length(prts[1,])){
+	tmp <- my.multi.selection.unlabel(n,prts[,i])
+	print(tmp)
+	prr[i] <- tmp[[1]]
+}
+prr
+sum(prr)
+
+# ある総数分布 nのときに、N個(x1+...+xk=N)を取り出した時に、どんなNの内訳がおきるかの
+# 計算はmy.multi.selection.unlabel(n,x)でできる
+# 逆に、xの観察のもとでの、nの尤度も同じ計算
+# nらしさはこの計算で行える
+
+```

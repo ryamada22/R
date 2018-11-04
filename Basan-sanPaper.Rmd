@@ -1,0 +1,59 @@
+---
+title: "Basak-san's paper plan"
+author: "ryamada"
+date: "2018”N4ŒŽ18“ú"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## What to appeal
+
+You propose a method to estimate type 1 error of MAX test on SNP sets for arbitrary cutoffs.
+
+## Merit of the method
+
+SNP subsets, such as SNPs in LD blocks and genes, can be quantitatively compared for heterogeneity in type 1 error.
+
+A new LD visualization is available that represents information on type 1 error of SNP sets rather than historical aspects.
+
+## Structure of introduction
+
+* Genetic Epideiology and GWAS where additive model tests of individual SNPs are performed in general and the same cutoff value is applied on all SNPs with consideration to type 1 error control (p~10^(-8), genomewide).
+
+* Genes or LD blocks are reported to be associated when any one of SNPs in the subset of SNPs of genes or LD blocks was identified as positive by the cutoff, in many cases. 
+
+* This can be said as an application of MAX test on multiple SNP subsets with the same cutoff. 
+
+* Type 1 error of MAX test on SNP subsets need to be controlled for indivudual SNP sets.
+
+* Therefore the positive signal in genes or LD blocks are reported without controlling SNP subset-wise type 1 error although LD structure is heterogeneous among SNP subsets.
+
+* You propose a method to estimate type 1 error of MAX test on SNP sets for arbitrary cutoffs and discuss its merits on interpretation of GWAS results.
+
+## Method section
+
+* MAX test should be briefly rephrased.
+
+* Spherization method should be described somehow with reference to last year's proceedings (in submission). However the proceedings are not published, the methods should be briefly but adequately described.
+
+* The Inner product matrix should be described carefully. It determines the convex hull shape and it possesses 100% information of probability density of MAX test. The discussion on 17th April in the meeting, (i) standard normal distribution is perfectly symmetric and the pairwise inner product information determines symmetric convexhull and that can be considered as the reason why the inner product matrix possesses 100% information. You don't have to say these symmetric and 100% but ,describe how inner product matrix infor determines the convex hull shape.
+
+* Botev method should be referenced with pertinent information on the methodology.
+
+* Add other methods that offer information on materials and methods used for the results below.
+
+## Results
+
+* Using a GWAS data set, show heterogeneity of MAX test p values for multiple cutoff points among genes and LD structures with basic descriptive statistics on genes, LD blocks and SNPs that belong to them.
+
+* Show LD triangle plots for some genome region; one LD triangle plot is r^2 and the other LD triangle plot is colored with inner product matrix value. This is a new visualization of LD structure focusing on type 1 error of MAX test.
+
+* Proposal of representative values of inner product matrix. Average of them, Variance of them, (and volume of convex hull) are somehow correlated with type 1 error. Therefore they can be used to compare genes/LD blocks grossly. To demonstrate that they represent type 1 error, you can use the evaluations of relation between type 1 errors and moments and so on. You can also show the superiority of average of inner products over average of r^2 that is somehow considered as an indicator of type 1 error conventionally.
+
+
+
+
+

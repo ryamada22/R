@@ -1,0 +1,267 @@
+---
+title: "極遠点写像"
+author: "ryamada"
+date: "2018年9月29日"
+output: html_document
+---
+
+# 極遠点写像
+
+## 極遠点
+
+球面$S_1$にグラフが張り付いているとする。球面上の点のペアに測地距離を定める。
+
+グラフのノードを無限に稠密にすると、$S_1$上に交叉することのない測地距離パターンが張り付いた状態になる。
+
+ここで極遠点を次のように定める。
+
+$S_1$上のある点$V$と$U$があるときに、$V$から$U$への測地距離が$U$(の近傍にて)極大となっているとき、
+$U$を$V$の極遠点と呼ぶことにする。
+
+## 極遠点写像
+
+測地距離を考えるときの始点$V$を乗せる$S_1$を定義域球面であることを意識して$S_1^d$、$U$を乗せる方を値域であることを意識して$S_1^r$とする。
+
+極遠点写像とは、
+$$
+f : S_1^{d} \to S_1^{r}
+$$
+なる滑らかな$f$である。
+
+定義域$S_1^d$には必ず１つ以上の値域$S_1^r$が対応しする。
+
+## グラフで考える極遠点写像
+
+今、$S_1^d,S_1^r$上に同一のグラフ$G^d=(V,E), G^r=(U,F)$が張り付いているとする。
+
+$G^d,G^r$の隣接行列($|V| \times |V| = |U| \times |U|$)をそれぞれ$A^d =(a^d_{p,q}),A^r=(a^r_{p,q})$とする。
+
+また、極遠点を表現する$|V| \times |U|$行列を$B$とする。
+
+$B$は以下のように定義される。
+
+$u_j \in f(v_i); v_i \in V, u_j \in U$かつ$G^d(i)$
+
+$$
+B = (b_{i,j});\\
+b_{i,j} = 1\ \  \text{if }  u_j \in f(v_i)\\
+b_{i,j} = 0\ \ \text{otherwise}
+$$
+
+## $f$が作る多様体・グラフ
+
+$G^d \times G^r$ なる空間を考える。
+
+この空間では、$(v_i,u_j);b_{i,j}=1$に点がある。
+
+この空間の２点$(v_i,u_j),(v_i',u_j')$間には、$a^d_{i,i'}=1$ かつ $A^r_{j,j'}=1$のときエッジを引く。
+
+このようにしてできる多様体・グラフは、分岐のある曲面であり、かつこの分岐あり曲面は滑らかで閉じている。
+
+これはノード数が$\sum b_{i,j}$のグラフになる。
+
+# Rでやってみる
+
+## 適当なグラフを作る
+
+```{r}
+# library(devtools)
+# install_github("ryamada22/Ronlyryamada") 
+library(Ronlyryamada)
+library(rgl)
+library(RFOC)
+library(igraph)
+library(knitr)
+library(tagcloud)
+```
+
+```{r setup}
+knit_hooks$set(webgl = hook_webgl)
+```
+
+適当に形を作る
+```{r, rgl=TRUE}
+# 形の凹凸・複雑さをコントロールするパラメタ、n,k
+n <- 5
+k <- 5
+# メッシュのノード数をコントロールするパラメタ
+n.mesh <- 32 # 色々試すなら、32くらいにしておくのが無難。送ったhtmlファイルはn.mesh=64
+# 形を球面調和関数係数ベクトルで指定する
+A. <- matrix(runif(n^2), n, n)
+A.[1, 1] <- k
+B <- matrix(rnorm(n^2), n, n)
+# 閉曲面オブジェクトを作る
+xxx <- my.spherical.harm.mesh(A = A., B = B, n = n.mesh)
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+```
+
+グラフオブジェクトにする
+```{r}
+g <- graph.edgelist(xxx$edge,directed=FALSE)
+# edge lengths
+w <- sqrt(apply((xxx$v[xxx$edge[,1],] -xxx$v[xxx$edge[,2],])^2,1,sum))
+```
+
+## 極遠点探索
+
+自身の周囲の頂点との距離を比較するだけだと、グラフ(離散)の場合には、鞍点が極遠点処理される傾向がありそうなので、
+
+自身のエッジ重みなし距離kの周囲頂点と比べることにする
+```{r}
+my.kyokuenten <- function(g,w,k=1){
+  nv <- length(V(g)) # 頂点数
+  d <- distances(g,weights=w) # エッジ重み付き頂点間距離
+  ad <- get.adjacency(g) # 隣接行列
+  d.noWeight <- distances(g) # エッジ重みなし頂点間距離
+  ret <- matrix(0,nv,nv) # i番ノードにとってj番ノードが極遠点なら1を立てる行列
+  for(i in 1:nv){ # すべての頂点について処理
+    #neighbor <- which(ad[i,]==1)
+    neighbor <- which(d.noWeight[i,] <= k & d.noWeight[i,] !=0) # 選んだ頂点の周囲頂点を列挙
+    tmp0 <- d[,i] # すべての頂点を始点とし、選んだ頂点を終点とする距離を持つ行列
+    tmp1 <- d[,neighbor] # すべての頂点を始点とし、選んだ頂点の近傍頂点を終点とする距離を持つベクトル
+    tmp2 <- apply(tmp1,1,max) # すべての頂点を始点とし、選んだ頂点の近傍頂点を終点とする距離の最大値を持つベクトル
+    tmp3 <- which(tmp0 >= tmp2) # 選んだ頂点が近傍より遠いかどうかの判定
+    ret[tmp3,i] <- 1
+    
+    #for(j in 1:nv){
+    #  this <- ad[i,j]
+    #  neighbor <- which(ad[j,]==1)
+    #  others <- ad[i,neighbor]
+    #  if(this >= max(others)){
+    #    ret[i,j] <- 1
+    #  }
+    #}
+  }
+  return(list(A=ad,B=ret,D=d,D.now=d.noWeight))
+}
+```
+```{r}
+# 極遠点判定の周辺範囲係数
+k <- 6
+out <- my.kyokuenten(g,w,k=k)
+```
+
+```{}
+par(mfcol=c(1,2))
+image(as.matrix(out$A))
+image(as.matrix(out$B))
+par(mfcol=c(1,1))
+```
+```{r}
+# 極遠点の数
+num.kyokuen <- apply(out$B,1,sum)
+# いくつの頂点に対して自身が極遠点となっているかの数(被極遠点数)
+num.hi.kyokuen <- apply(out$B,2,sum)
+```
+
+極遠点分布と非極遠点分布
+```{r}
+par(mfcol=c(1,2))
+plot(sort(num.kyokuen))
+plot(sort(num.hi.kyokuen))
+par(mfcol=c(1,1))
+```
+```{r,webgl=TRUE}
+# 極遠点を最もたくさん持つ頂点とその極遠点を色付けしてみる
+ii <- which(num.kyokuen==max(num.kyokuen))[1]
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+spheres3d(xxx$v[ii,],color=2,radius=0.1)
+spheres3d(xxx$v[which(out$B[ii,]==1),],color=3,radius=0.1)
+```
+
+```{r,webgl=TRUE}
+# 極遠点の数でノードを色分け表示する
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+color_unif1 <- smoothPalette(num.kyokuen, palfunc=colorRampPalette(c("blue", "gray", "red")))
+spheres3d(xxx$v,color=color_unif1,radius=0.05)
+
+```
+
+```{r,webgl=TRUE}
+# 被極遠点の数でノードを色分け表示する
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+color_unif2 <- smoothPalette(num.hi.kyokuen, palfunc=colorRampPalette(c("blue", "gray", "red")))
+spheres3d(xxx$v,color=color_unif2,radius=0.05)
+```
+色分けを工夫する。
+
+```{r,webgl=TRUE}
+# 極遠点の数でノードを色分け表示する
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+#col <- num.hi.kyokuen+1
+#col[which(col>=6)] <- 6
+ncol <- 6
+col <- ceiling(rank(num.kyokuen)/length(num.kyokuen) * ncol)
+spheres3d(xxx$v,color=col,radius=0.05)
+```
+```{r,webgl=TRUE}
+# 被極遠点の数でノードを色分け表示する
+plot3d(xxx$v)
+segments3d(xxx$v[c(t(xxx$edge)), ])
+#col <- num.hi.kyokuen+1
+#col[which(col>=6)] <- 6
+ncol <- 6
+col <- ceiling(rank(num.hi.kyokuen)/length(num.hi.kyokuen) * ncol)
+spheres3d(xxx$v,color=col,radius=0.05)
+```
+
+見た感じ、極遠点数分布の方が、被極遠点数分布よりも素直に形の特徴を取り出してるように見える。
+
+ここまで来たら、後は和田さんの色塗りパターン　→　グラフ化　問題と同じ(か？)。
+
+## 極遠点写像グラフを作る
+
+理論的に $S_1^d \times S_1^r$について考えるためには、極遠点数分布、被極遠点数分布を考えるだけではなくて、以下のような、写像$f$についてのハンドリングもできた方がよいかもしれないが、処理が重くなるばかりなので、この写像の幾何構造については理論的に(のみ)考える方がよいかもしれない。
+
+
+
+```{r,rgl=TRUE}
+my.kyokuenten.map.graph <- function(A,B){
+  vs <- which(B==1,arr.ind=TRUE)
+  n <- length(vs[,1])
+  tmp <- expand.grid(1:n,1:n)
+  ijkl <- cbind(vs[tmp[,1],],vs[tmp[,2],])
+  ii <- ijkl[,c(1,3)]
+  jj <- ijkl[,c(2,4)]
+  Aii <- Ajj <- rep(0,length(ijkl[,1]))
+  for( i in 1:length(Aii)){
+    Aii[i] <- A[ii[i,1],ii[i,2]]
+    Ajj[i] <- A[jj[i,1],jj[i,2]]
+  }
+  Aiijj <- Aii * Ajj
+  el.tmp <- which(Aiijj == 1)
+  el <- tmp[el.tmp,]
+  
+  return(list(el=as.matrix(el),ijkl=ijkl))
+}
+```
+
+```{}
+mapgraph <- my.kyokuenten.map.graph(out$A,out$B)
+```
+
+```{}
+dim(mapgraph$el)
+vs <- which(out$B==1,arr.ind=TRUE)
+n <- sum(out$B)
+tmp <- expand.grid(1:n,1:n)
+ijkl <- cbind(vs[tmp[,1],],vs[tmp[,2],])
+plot3d(xxx$v)
+el <- mapgraph$el
+V1 <- ijkl[el[,1],2]
+V2 <- ijkl[el[,2],4]
+EL <- cbind(V1,V2)
+segments3d(xxx$v[t(EL),])
+```
+```{}
+plot(mapgraph$el)
+```
+```{}
+mapg <- graph.edgelist(mapgraph$el,directed=FALSE)
+plot(mapg)
+```

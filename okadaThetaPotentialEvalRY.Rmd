@@ -1,0 +1,237 @@
+---
+title: "Untitled"
+author: "ryamada"
+date: "2018年11月4日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+#内積行列と確率行列をインプトとして拡大指数型表現分解
+library(MASS)
+df_simu_theo2 <- function(ip_mat,disP){
+
+  #log<P,Q> = 2<sita1,sita2>
+  sita_ip_est_mat <- log(ip_mat)/2
+
+  #固有値分解
+  eigen_out <- eigen(sita_ip_est_mat)
+  eigen_value <- eigen_out[[1]]
+  V <- eigen_out[[2]]
+  Sigma <- diag(sqrt(abs(eigen_value)))
+  Sita <- V %*% Sigma
+  S <- diag(sign(eigen_value))
+  #range(Sita %*% S %*% t(Sita) - sita_ip_est_mat)
+
+  #指数型分布族近似でF_dashを計算
+  grid_num <- ncol(disP)
+  sample_num <- nrow(disP)
+
+  Psi <- matrix(NA,sample_num,grid_num)
+  for(i in 1:sample_num){
+    psi <- sum(sign(eigen_value) * Sita[i,]^2)
+    Psi[i,] <- rep(psi,grid_num)
+  }
+  disP[disP==0] <- .Machine$double.xmin
+  P_dash <- log(disP) + Psi 
+  Sita_dash_re <- cbind(Sita,rep(1,nrow(Sita)))
+  F_dash_re <- ginv(Sita_dash_re) %*% P_dash
+ 
+  #結果の出力
+  result <- list(eigen_value,Sita_dash_re,F_dash_re)
+  names(result) <- c("eig","Sita_dash_re","F_dash_re")
+  return(result)
+
+}
+
+
+```
+```{r}
+#矩形分布
+# 始点と台の長さとで矩形分布をパラメタ表現する
+# すべての矩形分布間に正の内積が出るよう
+# すべての矩形分布は、0に値があるようにする
+
+n <- 100
+m <- 300
+
+st <- seq(from=-2,to=-0.1,length=n)
+len <- 1-st
+spt <- seq(from=min(st)-1,to=max(st + len)+1,length=m)
+ht <- 1/len/m
+preX <- matrix(0,n,m) #100 sample by 300grid
+for(i in 1:n){
+  tmp <- which(spt>=st[i] & spt<st[i]+len[i])
+  preX[i,tmp] <- ht[i]
+}
+X <- diag(1/rowSums(preX)) %*% preX
+Q = X %*% t(X)
+#X
+```
+
+```{r}
+matplot(t(preX),type="l")
+```
+```{r}
+result2 <- df_simu_theo2(Q,X)
+eigen_value2 <- result2$eig #固有値
+Sita_dash_re2 <- result2$Sita_dash_re #θ座標
+F_dash_re2 <- result2$F_dash_re #F and C
+F. <- F_dash_re2[-(n+1),]
+C. <- F_dash_re2[n+1,]
+Theta. <- Sita_dash_re2
+Eta. <-F. %*% t(X)
+```
+```{r}
+matplot(t(Eta.),type="l")
+```
+```{r}
+plot(Eta.[c(1),])
+```
+```{r}
+plot(Eta.[1,],Eta.[n,])
+```
+```{r}
+boxplot(t(Eta.))
+var.Eta. <- apply(Eta.,1,var)
+plot(var.Eta.)
+plot(var.Eta.,eigen_value2)
+
+```
+```{r}
+Eta.dist <- Theta.dist <- matrix(0,n,n)
+for(i in 1:n){
+  for(j in 1:n){
+    Eta.dist[i,j] <- sum((Eta.[,i]-Eta.[,j])^2 * sign(eigen_value2))
+    Theta.dist[i,j] <- sum((Theta.[i,1:n]-Theta.[j,1:n])^2 * sign(eigen_value2))
+  }
+}
+```
+```{r}
+image(Eta.dist)
+image(Theta.dist)
+image(Q)
+image(Theta.dist)
+```
+```{r}
+length(eigen_value2)
+```
+
+```{r}
+plot(Theta.[,1],Eta.[1,])
+```
+```{r}
+dim(Eta.)
+boxplot(t(Eta.[((n-3):n),]))
+
+```
+```{r}
+matplot(t(Theta.),type="l")
+```
+```{r}
+plot(Theta.[,c(1,n)])
+```
+```{r}
+plot(eigen_value2)
+```
+```{r}
+plot(F.[1,])
+```
+```{r}
+length(eigen_value2)
+```
+```{r}
+dim(F.)
+matplot(t(diag(eigen_value2)%*%F.),type="l")
+```
+
+```{r}
+plot(F.[n,])
+
+```
+```{r}
+plot(F.[1,],F.[n,])
+```
+
+```{r}
+#KL divを計算
+KLdiv_dis <- function(vector1,vector2){
+  vector1[vector1==0] <- .Machine$double.xmin
+  vector2[vector2==0] <- .Machine$double.xmin
+  kldiv <- sum(vector1*(log(vector1/vector2)))
+  #kldiv <- sum(vector1*log(vector1)-vector1*log(vector2))
+  return(kldiv)
+}
+KLdiv_dis2 <- function(theta1,eta1,theta2,eta2){
+  sum((theta1-theta2)*(eta1-eta2))
+}
+#Psi(theta)を計算
+Psi <- function(theta,eigen_value){
+    pos_eig_idx <- which(eigen_value >= 0)
+    neg_eig_idx <- which(eigen_value < 0)
+    psi <- sum(theta[pos_eig_idx]^2) - sum(theta[neg_eig_idx]^2)
+    return(psi)
+}
+#E(Fx)のベクトルを計算
+EFx <- function(prob_p,F_dash_re){
+    n <- nrow(X)
+    res <- rep(NA,n)
+    for(i in 1:n){
+        res[i] <- sum(prob_p*F_dash_re[i,])
+    }
+    return(res)
+}
+```
+```{r}
+#分布間のKL divergence, Nielsenの式の一行目(ExX_kl)のプロット
+#Nielsenの式の2行目(psi_kyori)と対称化したKL divergence を描く
+kl_kyori <- matrix(NA,n,n)
+psi_kyori <- matrix(NA,n,n)
+EFx_kl <- matrix(NA,n,n)
+kl_div <- matrix(NA,n,n)
+for(i in 1:n){
+  for(j in 1:n){
+    theta_p <- Sita_dash_re2[i,1:n]
+    theta_q <- Sita_dash_re2[j,1:n]
+    prob_p <- X[i,]
+    prob_q  <- X[j,]
+    psi_kyori[i,j] <- Psi(theta_p - theta_q,eigen_value2) #左辺
+    #kl_kyori[i,j] <- 0.5 * (KLdiv_dis(prob_p,prob_q) + KLdiv_dis(prob_q,prob_p))
+    kl_kyori[i,j] <- 0.5*( KLdiv_dis2(Theta.[i,1:n],Eta.[,i],Theta.[j,1:n],Eta.[,j]) + KLdiv_dis2(Theta.[j,1:n],Eta.[,j],Theta.[i,1:n],Eta.[,i]))
+    kl_div[i,j] <- KLdiv_dis(prob_p,prob_q)
+    EFx_kl[i,j] <- Psi(theta_q,eigen_value2) - Psi(theta_p,eigen_value2) - sum((theta_q - theta_p) * EFx(prob_p,F_dash_re2))
+  }
+  #cat(i)
+}
+```
+```{r}
+#拡大指数型分布族表現は2分布間のKL divergence の情報を完全に保持している
+range(kl_div-EFx_kl)
+plot(kl_div,EFx_kl)
+```
+```{r}
+#対称化KL距とPsi(theta_q - theta_p)は強い相関があるが完全には一致しない
+#これはNielsenの式の１行めから２行めの変形が、データドリブンに算出されたC,F,psiの組では取ることのできる$\theta$が限定されているために成り立たないからだと考えられる。
+plot(psi_kyori[upper.tri(psi_kyori)],kl_kyori[upper.tri(kl_kyori)])
+```
+```{r}
+
+```
+```{r}
+plot(psi_kyori,Theta.dist)
+```
+```{r}
+#plot(Eta.dist,kl_kyori)
+plot(Theta.dist+Eta.dist,kl_kyori)
+```
+
+```{r}
+length(Theta.dist)
+length(kl_kyori)
+```

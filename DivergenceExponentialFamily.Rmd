@@ -1,0 +1,556 @@
+---
+title: "DivergenceOfExponential"
+author: "ryamada"
+date: "2018年2月3日"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+    number_section: true
+---
+
+# KL divergenceに関する要約～やや詳しい話や、式変形は後述
+
+確率分布が指数型表現されているとする。
+$$
+\log{p(x|\Theta)} = C(x) + \Theta^T F(x) - \phi(\Theta)
+$$
+
+このとき、双対座標系 $\Theta,H$とそれぞれの座標系でのポテンシャル関数 $\phi(\Theta),\psi(H)$とが以下のように定まる。
+
+$$
+\phi(\Theta) = \log{ \int e^{C(x) + \Theta^T F(x)} dx}\\
+\psi(H) = \int p(x|\Theta) \log{p(x|\Theta)}dx - E_\Theta[C(x)]
+$$
+
+Bregman divergenceは次のように定義される。なお、Bregman 式の凸関数$k(x)$とその双対$k^*(x^*)$との関係は以下の通り。
+
+$$
+D_{Bregman}(P||Q) = \phi(\Theta(Q)) + \psi(H(P)) - \Theta(Q)^T H(P)\\
+\Theta(Q)^T H(P) = \sum_i \theta(Q)^i \eta(P)_i\\
+k(H)=\psi(H)=\psi(H)\\
+k^*(H^*)=\phi(H^*)=\phi(\Theta)
+$$
+
+
+
+また、確率分布のf-divergenceは次のように定義される。
+
+$$
+D_f(P||Q) = \int p(x|\Theta(P)) f(\frac{p(x|\Theta(Q))}{p(x|\Theta(P))})dx=\int p(x|\Theta(P)) \frac{p(x|\Theta(P))}{p(x|\Theta(Q))}dx\\
+f(u)= u-1-\log(u)
+$$
+
+実はこの$D_{Bregman}(P||Q)=D_f(P||Q)$であって、このダイバージェンスをKL divergenceと呼ぶ。
+
+この一致は以下の式変形で確認できる。
+
+$$
+KLd(P||Q) = D(P||Q) = \phi(\Theta(Q)) + \psi(H(P)) - \Theta(Q)^T H(P)\\
+KLd(P||Q) = \phi(\Theta(Q)) + \int p(x|\Theta(P)) \log(p(x|\Theta_P)) dx - E_{\Theta(P)}[C(x)] - \Theta(Q)^T \int p(x|\Theta(P)) F(x) dx\\
+KLd(P||Q) = \int p(x|\Theta(P)) ( \phi(\Theta(Q)) + \log(p(x|\Theta(P))) - C(x) - \Theta_Q^T F(x)) dx\\
+KLd(P||Q) = \int  p(x|\Theta(P)) ( \phi(\Theta(Q)) + C(x) + \Theta(P)F(x) - \phi(\Theta(P)) - C(x) - \Theta(Q)^T F(x)) dx\\
+KLd(P||Q) = \int  p(x|\Theta(P))) ( C(x) + \Theta(P)F(x) -\phi(\Theta(P)) - C(x) - \Theta(Q)^T F(x)) + \phi(\Theta(Q))  dx\\
+KLd(P||Q) = \int p(x|\Theta(P)) ( \log(p(x|\Theta(P))) - \log(p(x|\Theta(Q)))) dx\\
+KLd(P||Q) = \int p(x|\Theta(P))\frac{\log(p(x|\Theta(P)))}{\log(p(x|\Theta(Q)))}dx
+$$
+
+Bregman divergence と f-divergenceについては http://d.hatena.ne.jp/ryamada22/20180203 を参照。
+
+# Exponential Family の確率密度関数表現
+
+$$
+p(x|\Theta) = e^{C(x) + \Theta^T F(x) - \phi(\Theta)} = e^{C(x) + \sum_{i=1}f_i(x) \theta_i - \phi(\Theta)}\\
+$$
+
+
+where
+$$
+\Theta^T = (\theta_1,...)\\
+F(x)^T = \begin{pmatrix} f_1(x),...\end{pmatrix}\\
+$$
+
+$$
+\log{p(x|\Theta)} = C(x) + \Theta^T F(x) - \phi(\Theta)
+$$
+
+# Exponential Family の２つの座標系
+
+$$
+\Theta^T = (\theta_1,...)
+$$
+
+$$
+H ^T = (\eta_1,...) = E_\Theta[F(x)] = (E_\Theta[f_1(x)],...)
+$$
+where
+
+$$
+\eta_i = E_\Theta[f_i(x)] = \int p(x|\Theta) f_i(x) dx
+$$
+
+# Exponential Family のダイバージェンス
+
+ダイバージェンスというのは、「距離の二乗」に似た概念。
+
+ただし、距離という言うとき、AからBの距離とBからAの距離とは等しく、それを対称性であると言うが、ダイバージェンスでは、非対称性である。
+
+天下り的には指数型分布のダイバージェンスは二種類のポテンシャル関数 $\phi(\Theta),\psi(H)$とを用いて、以下のように表されることが知られている。
+
+$$
+D(P||Q) = \phi(\Theta(Q)) + \psi(H(P)) - \Theta(Q)^T H(P)\\
+\Theta(Q)^T H(P) = \sum_i \theta(Q)^i \eta(P)_i
+$$
+
+ダイバージェンスの非対称性は$D(P||Q) \ne D(Q||P)$ということである。
+
+## Exponential Family のポテンシャル関数
+
+指数型分布では
+
+$$
+\log{p(x|\Theta)} = C(x) + \Theta^T F(x) - \phi(\Theta)
+$$
+
+であり、このポテンシャル関数 $\phi(\Theta)$は、確率分布の特徴
+
+$$
+\int p(x|\Theta) dx = 1
+$$
+
+から、
+$$
+\phi(\Theta) = \log{ \int e^{C(x) + \Theta^T F(x)} dx}
+$$
+
+である。
+
+他方、
+
+$$
+\psi(H) = \int p(x|\Theta) \log{p(x|\Theta)}dx - E_\Theta[C(x)]
+$$
+である。
+
+これは、以下のようにして導ける。
+
+### $\psi(H) = \int p(x|\Theta) \log{p(x|\Theta)}dx - E_\Theta[C(x)]$ の導出
+
+また、$D(P||P)=0$であるから
+
+$$
+D(P||P)=0 = \phi(\Theta(P)) + \psi(H(P)) - \Theta(P)^T H(P)\\
+\psi(H(P)) = \Theta(P)^T H(P) - \phi(\Theta(P)) 
+$$
+
+ここで、
+
+$$
+H(P) = E[F(x)] = \int p(x|\Theta) F(x) dx
+$$
+であるから、
+$$
+\Theta(P)^T H(P) = \int p(x|\Theta) \Theta^T F(x) dx
+$$
+
+したがって、
+
+$$
+\psi(H(P)) = \Theta(P)^T H(P) - \phi(\Theta(P))\\
+\psi(H(P)) = \int p(x|\Theta) \Theta^T F(x) dx -\int p(x|\Theta) \phi(\Theta(P)) dx \\
+\psi(H(P)) = \int p(x|\Theta) (\Theta^T F(x)-\phi(\Theta(P)) dx \\
+\psi(H(P)) = \int p(x|\Theta) (C(x) + \Theta^T F(x)-\phi(\Theta(P)) dx - \int p(x|\Theta) C(x) dx\\
+\psi(H(P)) = \int p(x|\Theta) \log(p(x|\Theta)) dx - E_\Theta[C(x)]\\
+$$
+
+
+
+## ユークリッド空間での距離の二乗
+
+ユークリッド空間では、点の位置が座標 $Z=(z_1,...)$と表される。
+
+２点$Z_U=(z_{u1},...)$,$Z_V=(z_{v1},...)$の距離の２乗は
+
+$$
+d(U,V) = d(V,U) = ||Z_U-Z_V||^2 = \sum_i (z_{ui}-z_{vi})^2 = \sum_i z_{ui}^2 + \sum_i z_{vi}^2 -2 \sum_i z_{ui} z_{vi}
+$$
+
+と表される。
+
+ここで、ダイバージェンスが、非対称性であることを考慮して、$d(U,V)=d(V,U)$を$\delta(U||V)$と$\delta(V||U)$とに分けることにする。
+
+$$
+d(U,V) = d(V,U) = \delta(U||V) + \delta(V||U)\\
+d(U,V) = d(V,U) = (\frac{1}{2} \sum_i z_{ui}^2 + \frac{1}{2} \sum_i z_{vi}^2 - \sum_i z_{ui} z_{vi}) + (\frac{1}{2} \sum_i z_{vi}^2 + \frac{1}{2} \sum_i z_{ui}^2 - \sum_i z_{vi} z_{ui})) \\
+d(U,V) = d(V,U) =(\frac{1}{2} ||Z_U||^2 + \frac{1}{2} ||Z_V||^2 - Z_U^T Z_V) + (\frac{1}{2} ||Z_V||^2 + \frac{1}{2} ||Z_U||^2 - Z_V^T Z_U) 
+$$
+
+この$\delta(U||V)$をダイバージェンス
+$$
+D(U||V) = \phi(\Theta(U)) + \psi(H(V)) - \Theta(U)^T H(V)
+$$
+と対応付ける。
+
+その結果
+$$
+\phi(\Theta(U)) =\frac{1}{2}||Z_U||^2\\
+\psi(H(V)) =\frac{1}{2} ||Z_V||^2\\
+\Theta(U)^T H(V) = Z_U^T Z_V
+$$
+
+となり、
+
+$$
+\phi(X) = \psi(X) = \frac{1}{2} ||X||^2\\
+\Theta(X) = H(X) = Z_X
+$$
+
+がこの関係を満足することがわかる。
+
+したがって、ユークリッド空間は、２つの座標系等しく、２つのポテンシャル関数も等しい特別な空間であることも読み取れる。
+
+なお、ユークリッド空間ではリーマン計量は単位行列であるが、そこでのBregman divergenceの凸関数は
+$$
+k(z) = \frac{1}{2} ||z||^2
+$$
+
+
+# 分布間の違いの対称性計量
+
+分布関数のペアの違いの定め方として、色々なダイバージェンスがあることがわかった。
+
+KLdはその１つであり、Bregman divergenceでもあり、f-divergenceでもあることもわかった。
+
+分布に座標が与えられるのも嬉しい。
+
+分布が座標を持っているとき、それがユークリッド空間の座標であると、ベクトル空間を基本とした諸解釈ができるので便利なはずである。
+
+もちろん、そのようなユークリッド空間への配置は、KLdのような非平坦空間のダイバージェンスが持つ有用な特徴を利用できなくなることを意味するが、それは承知で、ユークリッド空間に配置することを考える。
+
+## Jensen Shanon divergence
+
+$$
+JSd(P||Q) = JSd(Q||P) = JSd(P,Q) = \frac{1}{2}(KLd(P||Q)+KLd(Q||P))
+$$
+
+これを「ユークリッド距離の二乗」とみなして、ユークリッド空間座標をMDSで与えることはできるだろう。LAVENDER法がそれである。
+
+$$
+JSd(P,Q) = \frac{1}{2} \int p\frac{\log{p}}{\log{q}} + q\frac{\log{q}}{\log{p}}dx\\
+JSd(P,Q) = \frac{1}{2} \int (p-q) (\log{p}-\log{q}) dx\\
+$$
+
+JSdは、$\Theta$のみで表すことは難しそうだ。
+
+### 重み付き幾何平均としてのJSd
+
+$\int p \log{p}dx$は、指数型分布の場合にBregman divergenceにおける凸関数に関連した関数であるし、それは二重平坦座標系のポテンシャル関数の１つと関連していることも意味している。
+
+特に$\log{p} = \Theta F(x) - \phi(\Theta)$と表現できる場合、すなわち、$C(x)=0$の場合には、ポテンシャル関数そのものである。
+
+また、エントロピーの負数でもある。
+
+しかしながら、別の解釈もある。
+
+以下が知られており、その右辺は、総和が1である正数ベクトルpの重み付き幾何平均の定義式そのものである(http://d.hatena.ne.jp/ryamada22/20180202)。
+
+重み付き幾何平均は、確率事象が、起きやすさに応じて起きやすい割合で起きることの積み重ね(独立生起)を数値化したものであり、それは、どれくらい起きやすいことが起きているのか、について、平均値を代表値としていることに相当する。ただし、代表値として幾何平均を用いている。また、「生起確率・尤度の全体に関する値」「生起確率・尤度の全体に関する極限」に相当している。
+
+$$
+e^{\sum p \log{p}} = \prod p^p
+$$
+
+
+## 半径2の球面上の点～$\alpha$-双対の考えを応用してみる
+
+$JSd(P,Q)$では$p$と$\log{p}$とがペアになっているようにみえる。
+
+このペアを何かの２乗にすると、対称性が上がるように思われる。
+
+そのような関数として
+$$
+2p^\frac{1}{2}
+$$
+
+がある。
+
+今、$p$と$\log{p}$とをどちらも$2p^\frac{1}{2}$に変換すると
+
+$$
+JSd(P,Q)' = D_{\alpha=0}(P,Q) = \frac{1}{2} \int (2p^\frac{1}{2}-2q^\frac{1}{2})^2 dx\\
+D_{\alpha=0}(P,Q) = \int(\sqrt{2p}-\sqrt{2q})^2dx = \int ||\sqrt{2p}||^2 dx + \int ||\sqrt{2q}||^2 dx - 2\int \sqrt{2p}\sqrt{2q} dx)\\
+D_{\alpha=0}(P,Q) = 4 (1-\int \sqrt{pq}dx)
+$$
+ただし、$\int ||\sqrt{2p}||^2 dx = \int 2p dx = 2 \int p dx = 2$を用いた。
+
+これは、確率密度関数の性質$\int p dx=1$を用いて、(無限長)ベクトル$\sqrt{2p}$を座標としたときの、２点間のユークリッド距離である。
+
+ちなみに、$\sqrt{2p}$は半径2の球面上の点である。
+
+今、分布の相対的な配置のみに興味があれば、単位球面上の点に取ることもできる。
+
+また、球面上の点となったので、弧長をその距離とみることもできる。
+
+それは
+
+$$
+D_{arc}(P,Q) = acos(\int \sqrt{pq}dx)
+$$
+
+### $\alpha$と双対
+
+$2p^\frac{1}{2}$を用いた理由は以下の通り。
+
+Fisher 情報量は
+$$
+Fisher_{ij}=\int \frac{\partial p}{\partial \theta_i} \frac{\partial \log{p}}{\partial \theta_j} dx
+$$
+と表されるが、これを一般化して
+
+$$
+Fisher_{ij} = \int \frac{\partial l^{(\alpha)}}{\partial \theta_i} \frac{\partial l^{(-\alpha)}}{\partial \theta_j} dx\\
+l^{(\alpha)}= \frac{2}{1-\alpha} p(x|\Theta)^{\frac{1-\alpha}{2}}\\
+l^{(\alpha)} = \log{p}, \text{when } \alpha=-1
+$$
+
+という表し方がある。
+ちなみに、$\l^{(\alpha=1)}=p$ である。
+
+ここで、$\alpha=0$のときは$l^{(\alpha)}=l^{(-\alpha)} = 2p(x|\Theta)^\frac{1}{2}$であり、
+
+## 関数の内積
+
+前項で$\int \sqrt{pq} dx$ が用いられた。
+
+もっとすなおに$\int pq dx$を用いることもできる。
+
+この$\int pq dx$は関数の内積である。
+
+$$
+D_{ip} = \int p p dx + \int q q dx - \int pq dx - \int qp dx = \int p^2 dx + \int q^2 dx -2 \int pq dx
+$$
+
+### 内積と重み付き算術平均
+
+$$
+\sum p \times p
+$$
+は、第一の$p$を重み、第二の$p$を起きやすさとみれば、どれくらい起きやすいことが起きるのかに関する重み付き算術平均を表していると見える。
+
+これが、内積$\int p p dx$の「起きやすさ」の数値指標としての捉え方の一つである。
+
+$\int p \log{p} dx$が重み付き幾何平均だったことを振り返ると、
+
+分布間距離の定量に当たっては、「起きやすさ」について何かしらの重み付き代表値(平均値)を使うのは、一つのやり方らしいことが見て取れる。
+
+幾何平均と算術平均とが使えたので、おそらく、一般化平均がどれでも使えるものと予想される。
+
+なお、内積の良い点は、標本を用いて、内積の推定値がカーネル関数を用いて計算できることだろう。
+
+## 関数の内積の対数
+
+関数の内積は関数間の異同の評価法として素直な方法である。
+また、カーネル法により推定も容易である。
+
+この関数の内積を基に、別の指標を作ることを考える。
+
+確率分布関数の内積は正であるので、その対数を取ることとする。
+
+$$
+D_{logIP} = \log{\int p p dx} + \log{\int q q dx} - \log{\int pq dx} - \log{\int qp dx}
+$$
+
+# 同じ指数型分布の内積
+
+指数型分布が
+$$
+\log{P(x|\theta)} = C(x) + \sum_{i=1} F_i(x) \theta_i - \psi(\theta)
+$$
+と表されているとする。
+
+ここで、以下の式変形を素直に行うために、次のように書き換える。
+
+$$
+\log{P(x|\theta)} = \sum_{i=0} F_i(x) \theta_i - \psi(\theta)\\
+F_0(x) = C(x), \theta_0 =C(onst)
+$$
+
+# 分布の内積
+
+$P_1(x|\theta_1)$と$P_2(x|\theta_2)$との内積は以下のように表される。
+
+$$
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \int P_1(x|\theta_1)P_2(x|\theta_2)dx
+$$
+
+ちなみに、分布からのランダム標本が得られているときに、ノンパラメトリックな分布推定方法としてカーネル法を採用したとすると、カーネルを用いた分布の異同の大きさを表すカーネル平均 $\frac{1}{NM}\sum_i^N \sum_j^M w_1(x_i) w_2(x_j) K(x_i,x_j)$の極限が上記の内積になっている("カーネル法KLd.Rmd"を参照)。
+
+この分布の内積の式を以下のように変形する。
+
+$$
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \int P_1(x|\theta_1)P_2(x|\theta_2)dx\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \int e^{\sum_{i=0} F_i(x) \theta_{1,i} - \psi(\theta_1)}e^{\sum_{i=0} F_i(x) \theta_{2,i} - \psi(\theta_2)}dx\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \int e^{\sum_{i=0} F_i(x) (\theta_{1,i}+\theta_{2,i})  - (\psi(\theta_1) + \psi(\theta_2))}dx\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) (\theta_{1,i}+\theta_{2,i})}dx
+$$
+
+ここで $\theta_1 + \theta_2 = \theta_{1+2}$とすると、
+
+$$
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i}}dx\\
+$$
+と書き表せる。
+
+今、
+$$
+\int P(x|\theta_1) dx = \int e^{\sum_{i=0} F_i(x) \theta_{i} - \psi(\theta)} dx = 1\\
+\int e^{\sum_{i=0} F_i(x) \theta_{i}} dx  = e^{\psi(\theta)}
+$$
+であることに注意すると、内積の式はさらに変形できて、
+
+$$
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i}}dx\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{1}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i} - \psi(\theta_{1+2})}e^{\psi(\theta_{1+2})}dx\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{e^{\psi(\theta_{1+2})}}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}} \int e^{\sum_{i=0} F_i(x) \theta_{1+2,i} - \psi(\theta_{1+2})}dx\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{e^{\psi(\theta_{1+2})}}{e^{\psi(\theta_1)}e^{\psi(\theta_2)}}
+$$
+
+この式が謂わんとしていることは
+
++ 指数型分布の内積は、log partition 関数 $\phi(\theta)$と分布パラメタの線形和 $\theta_{1+2} = \theta_1 + \theta_2$とで表現されていることを意味している。
+
+# $IP(P_1(x|\theta_1),P_2(x|\theta_2))$ と$\theta$座標系とをうまく関連付ける
+
+天下り式であるが、以下のように$\psi$を定める。
+
+$$
+\psi(\theta) = <\theta,\theta> = \sum_i \theta_i^2
+$$
+
+このとき
+
+$$
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{e^{<\theta_{1+2},\theta_{1+2}>}}{e^{<\theta_1,\theta_1>}e^{<\theta_2,\theta_2>}}\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = \frac{e^{<\theta_1,\theta_1>}e^{<\theta_2,\theta_2>}e^{2<\theta_1,\theta_2>}}{e^{<\theta_1,\theta_1>}e^{<\theta_2,\theta_2>}}\\
+IP(P_1(x|\theta_1),P_2(x|\theta_2)) = e^{2<\theta_1,\theta_2>}
+$$
+
+したがって
+$$
+LIP(P_1(x|\theta_1),P_2(x|\theta_2))) = \log{IP(P_1(x|\theta_1),P_2(x|\theta_2))} = 2 <\theta_1,\theta_2>
+$$
+
+
+
+ここで、$P_1(x|\theta_1)$と$P_2(x|\theta_2)$との違いを表す量$D(P_1(x|\theta_1),P_2(x|\theta_2))$を以下のように定めることにする。
+
+$$
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = 2(<\theta_1-\theta_2,\theta_1-\theta_2>)\\
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = 2 \sum (\theta_{1,i}-\theta_{2,i})^2\\
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = 2 \sum (\theta_{1,i}^2 + \theta_{2,i}^2 - 2\theta_{1,i}\theta_{2,i})\\
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = 2 (<\theta_1,\theta_1> + <\theta_2,\theta_2> - 2<\theta_1,\theta_2>)\\
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = 2 (\frac{1}{2}LIP(P_1(x|\theta_1),P_1(x|\theta_1))) + \frac{1}{2}LIP(P_2(x|\theta_2),P_2(x|\theta_2))) - LIP(P_1(x|\theta_1),P_2(x|\theta_2))))\\
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = LIP(P_1(x|\theta_1),P_1(x|\theta_1))) + LIP(P_2(x|\theta_2),P_2(x|\theta_2))) - 2LIP(P_1(x|\theta_1),P_2(x|\theta_2)))
+$$
+
+結局、
+
+$$
+D(P_1(x|\theta_1),P_2(x|\theta_2)) = 2(<\theta_1-\theta_2,\theta_1-\theta_2>)\\
+=LIP(P_1(x|\theta_1),P_1(x|\theta_1))) + LIP(P_2(x|\theta_2),P_2(x|\theta_2))) - 2LIP(P_1(x|\theta_1),P_2(x|\theta_2)))
+$$
+
+これは、２つの分布を$\theta$という座標に対応付け、２点の座標をユークリッド空間にあるものとみなした２乗ノルムが、LIPにて求まることを意味する。
+
+逆に、多数の分布があったときに、LIPから分布をユークリッド空間に配置するとしたときの座標がMDS的に定められることを意味する。
+
+そのとき$\theta$がこのようにうまくとれるような$F(x)$は、分布の特性を取り出していることになる。
+
+# Rでやってみる
+
+kernlabパッケージには２つの行列標本データを受け取り、mmdを返す関数がある。
+
+@mmdstatsにmmd値が入り、第一要素はbiased mmd値、第二要素はunbiased mmd値(多分)。
+
+```{r}
+library(kernlab)
+x <- matrix(runif(300),100)
+y <- matrix(runif(300)+1,100)
+
+
+mmdo <- kmmd(x, y)
+
+mmdo
+mmdo@mmdstats[1]
+
+```
+
+データをシミュレーション作成してみよう。
+
+$$
+P(x|\theta) \sim \theta_1 N(0,1) + \theta_2 N(1,1) + (1-\theta_1-\theta_2) N(4,2)
+$$
+```{r}
+n.dist <- 100
+library(MCMCpack)
+d <- 3
+thetas <- rdirichlet(n.dist,rep(1,d))
+means <- c(0,1,4)
+sds <- c(1,1,2)
+xs <- list()
+n.sample <- 1000
+i <- 1
+xs[[i]] <- c()
+tmp <- rmultinom(1,n.sample,thetas[i,])
+tmp[1]
+tmp[2]
+tmp[3]
+```
+
+```{r}
+n.dist <- 4
+library(MCMCpack)
+d <- 3
+thetas <- rdirichlet(n.dist,rep(1,d))
+means <- c(0,1,4)
+sds <- c(1,1,2)
+xs <- list()
+n.sample <- 1000
+for(i in 1:n.dist){
+  tmp <- rmultinom(1,n.sample,thetas[i,])
+  xs[[i]] <- rnorm(tmp[1],means[1],sds[1])
+  for(j in 2:d){
+    xs[[i]] <- matrix(c(xs[[i]],rnorm(tmp[j],means[j],sds[j])),ncol=1)
+  }
+}
+IP <- matrix(0,n.dist,n.dist)
+```
+
+```{r}
+my.dist.pair <- function(X1,X2){
+	L1 <- apply(X1^2,1,sum)
+	L2 <- apply(X2^2,1,sum)
+	IP <- X1 %*% t(X2)
+	sqrt(outer(L1,L2,"+") - 2 * IP)
+}
+gamma <- 0.1
+for(i in 1:n.dist){
+  for(j in i:n.dist){
+    tmp <- my.dist.pair(xs[[i]],xs[[j]])
+    IP[i,j] <- IP[j,i] <- sum(exp(-gamma*tmp^2))
+  }
+}
+logIP <- log(IP)
+D <- matrix(0,n.dist,n.dist)
+for(i in 1:n.dist){
+  for(j in i:n.dist){
+    D[i,j] <- D[j,i] <- logIP[i,i]^2+logIP[j,j]^2 - 2*logIP[i,j]
+  }
+}
+```
+
+```{r}
+D
+```
+
+# 分布関数を正規直交な関数の線形和にすることもできて、そうすると、LIPではなくIPを使って座標系を与えられる。が、LIPの方が素性がよさそう
