@@ -1,0 +1,577 @@
+---
+title: "三角メッシュ平面グラフの団代数"
+author: "ryamada"
+date: "2019年8月13日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(igraph)
+```
+
+## 三角メッシュとその双対グラフ、その辺接続行列
+```{r,echo=FALSE}
+# 雑な関数ではあるが
+# 行列のn乗を返す関数
+
+# power of Matrix
+my.powM <- function(M,n){
+	d <- length(M[,1])
+	ret <- diag(d)
+	for(i in 1:n){
+		ret <- ret %*% M
+	}
+	return(ret)
+}
+my.powM2 <- function(M,n){
+  eigen.out <- eigen(M)
+  tmp <- solve(eigen.out[[2]])
+  eigen.out[[2]] %*% diag(eigen.out[[1]]^n) %*% tmp
+  
+}
+# 行列のトレースを返す
+# Trace of matrix
+my.trace <- function(M){
+	sum(diag(M))
+}
+
+# 適当に三角メッシュ平面グラフの情報を返す
+# fは、頂点のトリオを時計回り(反時計回りと見なしても良い)に並べた行からなる３列行列
+# Fの各行に向きのある辺の番号を与えたものとしてい作った３列行列
+
+# generates a random triangular planar graph information
+# F is a matrix with 3 columns; each row has three integers that represent three edges that are in the order of clockwise rotation (or you can consider the order as counterclockwise.)
+# Returned values = F and f
+# F's row is just a three numbers of each triangle.
+# f is a matrix whose each row is consisted of three vertex ids in clockwise rotation order.
+my.rtri <- function(n,weight=TRUE,w.k=10){
+	f <- matrix(1:3,ncol=3)
+	f <- rbind(f,3:1)
+	for(i in 1:n){
+	  if(weight){
+	    vs <- 1:max(f)
+	    w <- rep(0,length(vs))
+	    for(i in 1:length(w)){
+	      w[i] <- sum(f==i)
+	    }
+	    f.w <- w[f[,1]] + w[f[,2]] + w[f[,3]]
+	    s <- sample(1:length(f[,1]),1,prob=1/f.w^w.k)
+	  }else{
+	    s <- sample(1:length(f[,1]),1)
+	  }
+		
+		v <- max(f) + 1
+		sf <- f[s,]
+		f <- f[-s,]
+		f <- rbind(f,c(sf[1:2],v))
+		f <- rbind(f,c(sf[2:3],v))
+		f <- rbind(f,c(sf[c(3,1)],v))
+	}
+	F <- matrix(1:(length(f[,1])*3),byrow=TRUE,ncol=3)
+	return(list(f=f,F=F))
+}
+
+# ３角形の頂点情報から、エッジリストを作る
+# my.rtri()関数の出力の$fから作る
+# エッジの並び順は、my.rtri()関数の出力の$Fとうまく合致するように並べ替えて出力してある
+# The function makes an edgelist with direction
+my.EfromF <- function(f){
+	el <- rbind(f[,1:2],f[,2:3],f[,c(3,1)])
+	tmp <- matrix(1:length(el[,1]),ncol=3)
+	el <- el[c(t(tmp)),]
+	return(el)
+}
+
+# 向きの違うエッジのペアを、my.EfromF()関数の出力での行番をエッジＩＤと見なして返す
+# The return is two-column matrix and each row is the number of edges paring in mutually opposite direction.
+my.Epair <- function(el){
+	s.el <- apply(el,1,sort)
+	mv <- max(el)+1
+	V <- s.el[1,] * mv + s.el[2,]
+	tmp <- outer(V,V,"-")
+	diag(tmp) <- 1
+	pairs <- which(tmp==0,arr.ind=TRUE)
+	return(pairs)
+}
+
+# 三角メッシュの各面の接続に相当する行列Ｒと
+# 逆向きエッジ対応に相当する行列Ｌとを返す
+
+# This function returns two square matrices, R and L
+# R %*% L is the edge-connection matrix of clockwise rotation
+my.permMat <- function(F,EL,E.pair){
+	n <- length(E.pair[,1])
+	R <- matrix(0,n,n)
+	trio.mat <- matrix(0,3,3)
+	trio.mat[1,2] <- trio.mat[2,3] <- trio.mat[3,1] <- 1
+	for(i in 1:length(F[,1])){
+		R[F[i,],F[i,]] <- trio.mat
+	}
+	L <- matrix(0,n,n)
+	for(i in 1:length(E.pair[,1])){
+		el1 <- EL[E.pair[i,1],]
+		el2 <- EL[E.pair[i,2],]
+		tmp1 <- which(apply((t(EL) - el1)^2,2,sum)==0)
+		tmp2 <- which(apply((t(EL) - el2)^2,2,sum)==0)
+		
+		L[tmp1,tmp2] <- 1
+	}
+	return(list(R=R,L=L))
+}
+
+# 何歩で戻るかを列挙する関数
+my.return.step <- function(Wc){
+  returned <- list()
+  for(i in 1:length(Wc[,1])){
+    returned[[i]] <- 0
+  }
+  for(i in 1:length(Wc[,1])){
+    tmp <- diag(my.powM(Wc,i))
+    if(sum(tmp)>0){
+      for(j in which(tmp==1)){
+        returned[[j]] <- c(returned[[j]],i)
+      }    
+    }
+  }
+  returned. <- lapply(returned,function(x){x[-1]})
+  returned.  
+}
+# 何歩で戻るかの情報で、Wc行列を複素行列化
+# この関数は、時計回りに部分を切り取るときに、時計回りエッジを選択する場合と
+# 反時計回りに部分を切り取るときに、反時計回りエッジを選択する場合
+my.complex.W <- function(Wc,counterclockwise=TRUE){
+  returned <- my.return.step(Wc)
+  tmp <- sapply(returned,min)
+  ret <- Wc
+  pm <- 1
+  if(!counterclockwise){
+    pm <- -1
+  }
+  for(i in 1:length(tmp)){
+    val <- exp(pm * 1i * 1/tmp[i]*2*pi)
+    loc <- which(ret[i,]==1)
+    ret[i,loc] <- val 
+  }
+  return(ret)
+}
+# この関数は、時計回りに部分を切り取るときに、反時計回りエッジと選ぶ場合と
+# 反時計回りに部分を切り取るときに、時計回りエッジを選ぶ場合
+# Wc,Wdは時計回り・反時計回りの複素行列,Pはエッジ対応行列
+my.complex.W.opp <- function(Wc,Wd,P){
+  Wd4c <- Wd # clockwiseに切り取るときのdエッジ選択
+  for(i in 1:length(Wc[,1])){
+    tmpd <- which(Wd[i,] != 0)
+    tmpc <- which(Wc[i,] != 0)
+    counter <- which(P[tmpc,] != 0)
+    tmpc2 <- which(Wc[counter,] != 0)
+    #print(Wc[i,tmpc])
+    #print(Wc[counter,tmpc2])
+    #print("0000")
+    Wd4c[i,tmpd] <- Wc[i,tmpc] * Wc[counter,tmpc2] / exp(1i * pi)
+  }
+  Wc4d <- P %*% t(Conj(Wd4c)) %*% t(P)
+  return(list(Wd4c=Wd4c,Wc4d=Wc4d))
+}
+
+# 有向辺のペアをあらわした行列Lを引数にして、(1,2),(2,3),...とそろえるために、エッジの番号付けを変換するための置換行列を返す関数
+my.L.sort <- function(L){
+	pairs <- which(L==1,arr.ind=TRUE)
+	pairs <- pairs[which(pairs[,1]<pairs[,2]),]
+	sfl <- c(t(pairs))
+	SS <- diag(length(sfl))[,sfl]
+	return(SS) # t(SS) %*% L %*% SS is the sorting calculation
+}
+
+# ランダムに三角形planar graphを作り、それに関する辺接続行列等を返す関数
+my.rTriRL <- function(n.tri,L.sort=FALSE){
+  F <- my.rtri(n.tri)
+  EL <- my.EfromF(F$f)
+  E.pair <- my.Epair(EL)
+  RL <- my.permMat(F$F,EL,E.pair)
+  # RL出力から、双対グラフの時計回り接続行列を作る
+  Wc <- RL$L %*% RL$R
+# 双対グラフの反時計回り接続行列を作る
+  Wd <- RL$L %*% t(Wc) %*% RL$L
+# 行・列入れ替え
+  s <- sample(1:length(Wc[,1]))
+  S <- diag(length(s))[,s]
+  Wc. <- S %*% Wc %*% t(S)
+  Wd. <- S %*% Wd %*% t(S)
+# 双対グラフのゼータ関数向けの接続行列を作る
+  We <- Wc + Wd
+  We. <- Wc. + Wd. 
+  
+  # 複素行列
+  # このWc.cpx,Wd.cpxは、時計回りに部分を切り取るときに、時計回りエッジを選択する場合と
+  # 反時計回りに部分を切り取るときに、反時計回りエッジを選択する場合
+  ret.steps <- my.return.step(Wc)
+  Wc.cpx <- my.complex.W(Wc,counterclockwise=FALSE)
+  #Wd.cpx <- my.complex.W(Wd,counterclockwise=FALSE)
+  Wd.cpx <- RL$L %*% t(Conj(Wc.cpx)) %*% RL$L
+  
+  opp.cpx <- my.complex.W.opp(Wc.cpx,Wd.cpx,RL$L)
+  
+  # 4行列を追合関係の２行列にする
+  ZeroMat <- matrix(0,length(Wc.cpx[,1]),length(Wc.cpx[,1]))
+  W <- rbind(cbind(Wc.cpx,ZeroMat),cbind(ZeroMat,opp.cpx$Wc4d))
+  W.star <- rbind(cbind(opp.cpx$Wd4c,ZeroMat),cbind(ZeroMat,Wd.cpx))
+  
+  if(L.sort){
+    SS <- my.L.sort(RL$L)
+    Wc4c.cpx=t(SS) %*% Wc.cpx %*% SS
+    Wd4c.cpx=t(SS) %*% Wd.cpx %*% SS
+    Wc4d.cpx = t(SS) %*% opp.cpx$Wc4d %*% SS
+    Wd4c.cpx = t(SS) %*% opp.cpx$Wd4c %*% SS
+    
+    # 4行列を追合関係の２行列にする
+    W <- rbind(cbind(Wc4c.cpx,ZeroMat),cbind(ZeroMat,Wc4d.cpx))
+  W.star <- rbind(cbind(Wd4c.cpx,ZeroMat),cbind(ZeroMat,Wd4c.cpx))
+    
+    return(list(Wc=t(SS) %*% Wc %*% SS,Wd=t(SS) %*% Wd %*% SS,We=t(SS) %*% We %*% SS,Wc.=t(SS) %*% Wc. %*% SS, Wd.=t(SS) %*% Wd. %*% SS,We.=t(SS) %*% We. %*% SS,Wc4c.cpx=Wc4d.cpx ,Wd4d.cpx=Wd4d.cpx,Wc4d.cpx = Wc4d.cpx, Wd4c.cpx = Wdec.cpx, W = W, W.star = W.star,R = t(SS) %*% RL$R %*% SS , L = t(SS) %*% RL$L %*% SS,F=F,EL=EL,E.pair=E.pair))
+  }else{
+    return(list(Wc=Wc,Wd=Wd,We=We,Wc.=Wc.,Wd.=Wd.,We.=We.,Wc4c.cpx=Wc.cpx,Wd4d.cpx=Wd.cpx,Wc4d.cpx = opp.cpx$Wc4d, Wd4c.cpx = opp.cpx$Wd4c, W=W,W.star=W.star,R = RL$R, L = RL$L,F=F,EL=EL,E.pair=E.pair))
+  }
+  
+}
+
+# f : ３列行列、３角形の３頂点、反時計回り
+
+my.edge.adj <- function(f){
+	el <- rbind(f[,1:2],f[,2:3],f[,c(3,1)])
+	el <- t(apply(el,1,sort))
+	el <- unique(el)
+	ret <- matrix(0,length(el[,1]),length(el[,1]))
+	for(i in 1:length(f[,1])){
+		e1 <- sort(f[i,1:2])
+		e2 <- sort(f[i,2:3])
+		e3 <- sort(f[i,c(3,1)])
+		e1.id <- which(apply((t(el)-e1)^2,2,sum)==0)
+		e2.id <- which(apply((t(el)-e2)^2,2,sum)==0)
+		e3.id <- which(apply((t(el)-e3)^2,2,sum)==0)
+		ret[e1.id,e2.id] <- ret[e2.id,e3.id] <- ret[e3.id,e1.id] <-1
+	}
+	return(ret)
+}
+my.tri.adj <- function(f){
+	el <- rbind(f[,1:2],f[,2:3],f[,c(3,1)])
+	el <- t(apply(el,1,sort))
+	el <- unique(el)
+	g <- graph.edgelist(el,directed=FALSE)
+	ret <- get.adjacency(g)
+	return(as.matrix(ret))
+}
+
+```
+
+## 団代数
+```{r}
+# 有向隣接行列を反対称行列に変える
+
+my.adj2skewsim <- function(A){
+  return(A + (-1) * t(A))
+  
+}
+# その逆
+my.skewsim2adj <- function(B){
+  B. <- B
+  B.[which(B<0)] <- 0
+  return(B.)
+}
+my.non.negative <- function(a){
+	ret <- max(a,0)
+	return(ret)
+}
+# x変数の変異
+my.x.mut <- function(X,B,k=1:length(B[,1])){
+	ret <- list()
+	n <- length(B[,1])
+	nk <- length(k)
+	for(i in 1:nk){
+		ret[[i]] <- X
+		tmp1 <- 1
+		tmp2 <- 1
+		for(j in 1:n){
+			if(j != k[i]){
+				b1 <- B[j,k[i]]
+				b2 <- B[k[i],j]
+				if(b1 > b2){
+					tmp1 <- tmp1 * X[[j]]^my.non.negative(b1)
+					tmp2 <- tmp2 * X[[j]]^my.non.negative(b2)
+				}else{
+					tmp1 <- tmp1 * X[[j]]^my.non.negative(b2)
+					tmp2 <- tmp2 * X[[j]]^my.non.negative(b1)
+				}
+				
+			}
+		}
+		tmp <- 1/X[[k[i]]] * (tmp1 + tmp2)
+		ret[[i]][[k[i]]] <- tmp
+		ret[[i]][[k[i]]] <- Simplify(ret[[i]][[k[i]]])
+	}
+	if(nk==1){
+		return(ret[[1]])
+	}else{
+		return(ret)
+	}
+}
+# y変数の変異
+my.y.mut <- function(Y,B,k=1:length(B[,1])){
+	ret <- list()
+	n <- length(B[,1])
+	nk <- length(k)
+	for(i in 1:nk){
+		ret[[i]] <- Y
+		Yk <- Y[[k[i]]]
+		for(j in 1:n){
+			if(j == k[i]){
+				ret[[i]][[j]] <- 1/Yk
+			}else{
+				b <- B[j,k[i]]
+				ret[[i]][[j]] <- Y[[j]] * (1+Yk^sign(b))^b
+			}
+		}
+		ret[[i]][[j]] <- Simplify(ret[[i]][[j]])
+	}
+	if(nk==1){
+		return(ret[[1]])
+	}else{
+		return(ret)
+	}
+
+}
+# 変換行列の変異変化
+my.Ebira.mut <- function(B,ks=1:length(B[,1])){
+  ret <- list()
+  n <- length(ks)
+  for(k in 1:n){
+    ret[[k]] <- matrix(0,n,n)
+    for(i in 1:n){
+      for(j in 1:n){
+        if(i == ks[k] | j == ks[k]){
+          ret[[k]][i,j] <- (-1) * B[i,j]
+        }else{
+          tmp1 <- B[i,ks[k]]
+          tmp2 <- -B[ks[k],j]
+          if(tmp1 <= 0){
+            tmp1 <- 0
+          }
+          if(tmp2 <= 0){
+            tmp2 <- 0
+          }
+          ret[[k]][i,j] <- B[i,j] + tmp1 * B[ks[k],j] + tmp2 * B[i,ks[k]]
+        }
+      }
+      
+    }
+  }
+  if(n == 1){
+    return(ret[[1]])
+  }
+  return(ret)
+}
+# PDFの箙変換則をRのベクトル演算に合わせて記載
+my.Ebira.mut2 <- function(B,ks=1:length(B[,1])){
+  ret <- list()
+  n <- length(ks)
+  for(k in 1:n){
+    ret[[k]] <- B
+    # 変わるのはk行・k列
+    out.K <- B[ks[k],]
+    in.K <- B[,ks[k]]
+    # 非負のみを問題にする
+    in.K.nn <- in.K * (in.K >= 0)
+    out.K.nn <- out.K * (out.K >= 0)
+    prod.K <- matrix(in.K.nn,ncol=1) %*% matrix(out.K.nn,nrow=1)
+    
+    ret[[k]] <- ret[[k]] + prod.K + (-1) * t(prod.K)
+    
+    ret[[k]][,ks[k]] <- (-1) * in.K
+    ret[[k]][ks[k],] <- (-1) * out.K
+  }
+  if(n == 1){
+    return(ret[[1]])
+  }
+  return(ret)
+}
+
+
+# Xの双対変数を作る
+my.YfromX <- function(X,B){
+	n <- length(X)
+	Y <- list()
+	for(i in 1:n){
+		Y[[i]] <- 1
+		for(j in 1:n){
+			if(j != i){
+				Y[[i]] <- Y[[i]] * X[[j]]^B[j,i]
+			}
+		}
+	}
+	Y
+}
+```
+
+三角メッシュの隣接行列、双対グラフ隣接行列の変異
+```{r}
+my.Adj.mut <- function(A,ij=NULL,tri=TRUE,silent=TRUE){
+	if(is.null(ij)){
+		tmp <- which(as.matrix(A)==1,arr.ind=TRUE)
+		s <- sample(1:length(tmp[,1]))
+		loop <- TRUE
+		cnt <-1
+		while(loop){
+		  ij <- tmp[s[cnt],]
+		  i.row <- A[ij[1],]
+	    j.row <- A[ij[2],]
+	    #print(ij)
+	    neighbors <- which((i.row ==1) & (j.row ==1))
+	    if(length(neighbors)==2 & sum(i.row)>3 & sum(j.row) >3 & A[neighbors[1],neighbors[2]] != 1){
+	      loop <- FALSE
+	    }
+		  cnt <- cnt+1
+		}
+		
+	}else{
+	  	i.row <- A[ij[1],]
+	  j.row <- A[ij[2],]
+	  #print(ij)
+	  neighbors <- which((i.row ==1) & (j.row ==1))
+	  	#print(neighbors)
+	  if(A[ij[1],ij[2]]!=1 | length(neighbors)!=2 | sum(i.row)==3 | sum(j.row)==3 | A[neighbors[1],neighbors[2]] == 1){
+		  if(!silent){
+			  print("inappropriate i and j")
+		  }
+		  return(A)
+	  }
+	}
+
+
+	ret <- A
+	ret[ij[1],ij[2]] <- ret[ij[2],ij[1]] <- 0
+	ret[neighbors[1],neighbors[2]] <- ret[neighbors[2],neighbors[1]] <- 1
+	return(ret)
+}
+
+```
+
+```{r}
+n <- 500
+tri <- my.rtri(n)
+```
+
+```{r}
+A <- my.tri.adj(tri$f)
+image(A)
+```
+```{r}
+A.series <- list()
+A.series[[1]] <- A
+for(i in 2:10){
+  A.series[[i]] <- my.Adj.mut(A.series[[i-1]])
+}
+```
+
+```{r}
+ev <- lapply(A.series,function(x){eigen(x)[[1]]})
+```
+
+```{r}
+hist(unlist(ev))
+```
+
+```{r}
+e.A <- my.edge.adj(tri$f)
+range(apply(e.A,1,sum))
+range(apply(e.A,2,sum))
+```
+```{r}
+image(e.A)
+```
+
+```{r}
+library(igraph)
+g <- graph.adjacency(e.A) 
+plot(g)
+```
+
+```{r}
+eigen.out <- eigen(e.A)
+plot(eigen.out[[1]])
+```
+```{r}
+B <- my.adj2skewsim(e.A)
+image(B)
+```
+
+
+三角化を団代数の変異によって変えていくことにする。
+
+三角メッシュであるためには、すべてのエッジを切り替えることができるわけではない。
+
+エッジの選択の仕方によっては、総エッジ数(エッジ隣接行列の行数・列数)は変わらないが、それに対応していた、三角メッシュの頂点数、面数が平面グラフのルール(V-E+F =2)を保たなくなる。
+
+以下では、それを保つように変異を進めていく
+```{r}
+n.e <- length(e.A[,1])
+if(n.e>100){
+  n.e <- 100
+}
+n.sample <- 100
+k <- sample(1:n.e,n.sample,replace=TRUE)
+k <- rep(1:2,20)
+B.series <- list()
+B.series[[1]] <- B
+cnt <- 2
+for(i in 1:n.e){
+
+  tmp <- my.Ebira.mut2(B.series[[cnt-1]],ks=k[i])
+  tmp2 <- apply(abs(tmp),1,sum)
+  tmp3 <- apply(abs(tmp),2,sum)
+  tmp4 <- sum((tmp2-4)^2) + sum((tmp3-4)^2)
+  if(tmp4==0){
+    B.series[[cnt]] <- tmp
+    cnt <- cnt+1
+  }else{}
+}
+```
+
+```{r}
+BI.series <- lapply(B.series,function(x){x+diag(rep(1,length(B[,1])))})
+```
+
+```{r}
+mutB.series <- list()
+for(i in 1:(length(B.series)-1)){
+  mutB.series[[i]] <- BI.series[[i+1]] %*% solve(BI.series[[i]])
+}
+```
+```{r}
+range(sapply(B.series,function(x){range(apply(abs(x),1,sum))}))
+```
+
+```{r}
+# skew symmetric matrixの固有値の実部はすべて０らしい
+evIm <- matrix(0,length(B.series),length(B[,1]))
+for(i in 1:length(B.series)){
+  evIm[i,] <- sort(Im(eigen(B.series[[i]])[[1]]))
+}
+```
+```{r}
+matplot(t(evIm),type="l")
+```
+
+```{r}
+e.adjs <- lapply(B.series,my.skewsim2adj)
+ev <- lapply(e.adjs,eigen)
+evs <- sapply(ev,function(x){x[[1]]})
+```
+```{r}
+plot(evs,asp=TRUE)
+```
+
+
+```{r}
+plot(ev[[1]][[1]])
+points(ev[[4]][[1]],col=2)
+```

@@ -105,11 +105,12 @@ plot(var.Eta.,eigen_value2)
 
 ```
 ```{r}
-Eta.dist <- Theta.dist <- matrix(0,n,n)
+Eta.dist <- Theta.dist <- ThetaEta.dist <- matrix(0,n,n)
 for(i in 1:n){
   for(j in 1:n){
     Eta.dist[i,j] <- sum((Eta.[,i]-Eta.[,j])^2 * sign(eigen_value2))
     Theta.dist[i,j] <- sum((Theta.[i,1:n]-Theta.[j,1:n])^2 * sign(eigen_value2))
+    ThetaEta.dist[i,j] <- sum((Theta.[i,1:n]-Theta.[j,1:n])*(Eta.[,i]-Eta.[,j]))
   }
 }
 ```
@@ -201,9 +202,10 @@ for(i in 1:n){
     theta_q <- Sita_dash_re2[j,1:n]
     prob_p <- X[i,]
     prob_q  <- X[j,]
-    psi_kyori[i,j] <- Psi(theta_p - theta_q,eigen_value2) #左辺
-    #kl_kyori[i,j] <- 0.5 * (KLdiv_dis(prob_p,prob_q) + KLdiv_dis(prob_q,prob_p))
-    kl_kyori[i,j] <- 0.5*( KLdiv_dis2(Theta.[i,1:n],Eta.[,i],Theta.[j,1:n],Eta.[,j]) + KLdiv_dis2(Theta.[j,1:n],Eta.[,j],Theta.[i,1:n],Eta.[,i]))
+    #psi_kyori[i,j] <- Psi(theta_p - theta_q,eigen_value2) #左辺
+    psi_kyori[i,j] <- sum()
+    kl_kyori[i,j] <- 0.5 * (KLdiv_dis(prob_p,prob_q) + KLdiv_dis(prob_q,prob_p))
+    #kl_kyori[i,j] <- 0.5*( KLdiv_dis2(Theta.[i,1:n],Eta.[,i],Theta.[j,1:n],Eta.[,j]) + KLdiv_dis2(Theta.[j,1:n],Eta.[,j],Theta.[i,1:n],Eta.[,i]))
     kl_div[i,j] <- KLdiv_dis(prob_p,prob_q)
     EFx_kl[i,j] <- Psi(theta_q,eigen_value2) - Psi(theta_p,eigen_value2) - sum((theta_q - theta_p) * EFx(prob_p,F_dash_re2))
   }
@@ -219,6 +221,9 @@ plot(kl_div,EFx_kl)
 #対称化KL距とPsi(theta_q - theta_p)は強い相関があるが完全には一致しない
 #これはNielsenの式の１行めから２行めの変形が、データドリブンに算出されたC,F,psiの組では取ることのできる$\theta$が限定されているために成り立たないからだと考えられる。
 plot(psi_kyori[upper.tri(psi_kyori)],kl_kyori[upper.tri(kl_kyori)])
+```
+```{r}
+plot(ThetaEta.dist,kl_kyori)
 ```
 ```{r}
 

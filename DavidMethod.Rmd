@@ -1,0 +1,151 @@
+---
+title: "Necklace"
+author: "ryamada"
+date: "2018”N11ŒŽ20“ú"
+output: html_document
+---
+# A method to find all necklaces in a mesh
+
+A triangular mesh $T$ on n points, 1,2,...,n, is given along with positive weights on the $3n-6$ (Euler's rule). 
+This defines a shortest distances $d_{ij}$ for edge pair of points.
+
+## Def:
+
+A necklace is a cycle $C=c1,c2,..,ck,c1 $ in $T$ for which $d(ci,cj) = $ length of the shortest path on C between $ci$ and $cj$, 
+and which partitions T into two non-empty parts.
+
+## Def:
+
+A shortes path tree $SPT(K)$ is a tree rooted at K that defines the shortest distance from K to all other points of T.
+
+## Assumption (mostly technical for simplicity, can be removed removed in several ways):
+
+There is a unique shortest path between each pair of points in T.
+
+## Method
+
+### Phase 1
+
+1. For each $K \in \{1,...,n\}$ compute $SPT(K)$.
+
+2. Each edge $uv$ of the remeining $2n-5 = 3n - 6 - (n-1)$ edges in $T$ creates a unique cycle $C_{uv}$ in $SPT(K_{uv})$.
+  + The idea using the remaining edges is used in the graph's zeta function based on path ( http://math.ucsd.edu/~aterras/snowbird.pdf ).
+
+3. Record $C_{uv}$ in a list if 
+  + It is not a triangular face of $T$.
+  + It includes the root $K$ of $SPT(K)$.
+  
+### Phase 2
+
+Let $C = c1,c2,...,ck,c1$ be a cycle in the list.
+
+If $C$ appears in $SPT(j), j= c1,c2,...,ck$, then it is a necklace in $T$, otherwise it is not.
+
+$C$ is written in canonical form so that $c1 < c2$ is the lexicographic smallest edge of $C$.
+
+## Notes
+
+1. Running time mostly dominated by computing $SPT(K)$ about $0(n^2 \log{n}$) and practical upto about $10^6$ nodes. Easy to parallelize!
+
+2. Finding the necklaces from the cycle lists can be done in several ways, Eg;
+
+  + Merge lists, sort and count repetitions in one pass of sorted list
+  + "Hash" each cycle into a table counting the number of "collisions".
+
+## Implementation with R
+
+Make an undirected weighted graph object.
+
+The condition "It includes the root $K$ of $SPT(K)$" is ommited.
+
+```{r}
+# g: igraph's graph object
+# w: edge length
+library(igraph)
+library(optrees)
+el <- matrix(c(1,2,1,4,1,5,1,7,1,8,2,3,2,5,2,6,2,7,2,9,3,4,3,6,3,9,4,5,4,6,4,8,4,9,5,6,7,8,7,9,8,9),byrow=TRUE,ncol=2)
+w <- c(1,1,1.1,2,2,1,2,2,2,2.05,2,1.1,2.1,1.1,1.2,2.05,2,1,2,3,2)
+g <- graph.edgelist(el,directed=FALSE)
+
+nv <- length(V(g))
+ne <- length(E(g))
+
+arcs <- cbind(el,w)
+repGraph(1:nv,arcs)
+```
+
+Check the number of edges $ne = 3 nv -6$  (Euler's formula for triangular mesh).
+
+```{r}
+ne == 3 * nv - 6
+```
+
+Generate shortest paths from each node.
+
+```{r}
+spt <- list()
+for(i in 1:nv){
+  spt[[i]] <- shortest_paths(g,from=i,output="both",weights=w)
+  spt[[i]]$remedge <- (1:ne)[-unlist(spt[[i]]$epath)]
+}
+```
+
+Check the number of remaining edges is $2 nv - 5$.
+```{r}
+check.remedge <- rep(NA,nv)
+for(i in 1:nv){
+  check.remedge[i] <- length(spt[[i]]$remedge) == 2*nv - 5
+}
+check.remedge
+```
+
+List up candicate cycles and record their component node ids (sorted).
+
+```{r}
+candC <- list()
+for(i in 1:nv){
+  #candC[[i]] <- list()
+  for(j in 1:length(spt[[i]]$remedge)){
+    this.edge <- el[spt[[i]]$remedge[j],]
+    tmp1 <- spt[[i]]$vpath[[this.edge[1]]]
+    tmp2 <- spt[[i]]$vpath[[this.edge[2]]]
+    candC[[(i-1)*(2*nv-5) +j ]] <- sort(unique(c(tmp1,tmp2)))
+  }
+}
+```
+
+Convert the node ids of cycles into character strings.
+```{r}
+candC.txt <- sapply(candC,paste,collapse="_")
+```
+
+Count the cycles(character strings).
+
+```{r}
+tab <- table(candC.txt)
+```
+
+Get the number of nodes for each element of "tab" object.
+```{r}
+len.C <- (nchar(names(tab))+1)/2
+```
+
+Necklace with k nodes should appear k times.
+Based on this feature, necklaces should be extracted from candidates.
+
+Necklace is defined as "no triangle" above.
+Below, necklaces including with triangles and without triangles are enumerated.
+
+```{r}
+necklaces <- which(tab==len.C)
+necklaces.no.tri <- which(tab==len.C & len.C>3)
+```
+
+Show nodes of necklaces.
+
+```{r}
+strsplit(names(necklaces),split="_")
+```
+```{r}
+strsplit(names(necklaces.no.tri),split="_")
+```

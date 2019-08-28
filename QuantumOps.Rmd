@@ -1,0 +1,223 @@
+---
+title: "Quantum Oracle"
+author: "ryamada"
+date: "2019年8月6日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+資料は[こちら](http://people.ece.umn.edu/~ukarpuzc/Karpuzcu_files/QuantumOps.pdf)。
+
+
+## Rの量子計算パッケージ QuantumOpsのQuantum Oracle関数
+
+量子コンピューティングでは、n量子ビットの入力（input register)をもとに、処理を決め、決めた処理を、m量子ビットの入力(target register)に作用させて、n量子ビットには変化をさせず、m量子ビットを変化させる、という量子演算がある。
+
+* 今、input register(２進法でn桁)の値が x であるとする。
+
+* このxに基づく、処理をf(x)の値が決めるものとする。
+
+* f(x)の値は0以上の整数であるとし、f(x)の値を、target registerのm量子ビットが表す値に加え、その結果の値を処理後のtarget registerの値とする
+
+
+## 資料の例
+
+[資料](http://people.ece.umn.edu/~ukarpuzc/Karpuzcu_files/QuantumOps.pdf)の例をそのまま示す。
+
+```{r}
+library(QuantumOps)
+v <- intket(0,4)
+f <- function(x){(x+2) %% 4}
+m <- Uf(f,2,2)
+print(dirac(v))
+print(dirac(U(m,v)))
+```
+
+ここに示した例では、Dirac表記の左側２量子ビット "00"がinput registerで、右側２量子ビット "00" がtarget register。
+
+
+input register の "00"は整数"0"に相当するから
+
+```{r}
+x <- 0
+f(x)
+```
+
+となって、変化は"2"である。
+
+"2" は2進法で、"10"に相当するから、target registerの"00" に"10"を加えると、"10"
+
+になる。
+
+したがって、処理後は、左側２量子ビットの"00"には変化がなく、右側２量子ビットの"00"が"10"に変わる。
+
+## 丁寧にやる
+
+QuantumOpsパッケージのQuantum Oracle関数 Uf()を少し改変して、中の処理をプリントアウトするように変える。
+
+input registerに対応するループ
+
+>||
+for(x in 0:(2^n-1)){
+
+}
+||<
+
+について、xの値ごとに、f(x)の値がどうなっているかをプリントアウトし、f(x)の値を2進法表記に変えたbもプリントアウトしている。
+
+
+(x,f(x))ごとに、target registerに相当する量子ビットに対応する正方行列 g が作られるので、それもプリントアウトする。
+
+
+```{r}
+my.Uf <- function (fun, n, m) 
+{
+    Um <- matrix(rep(0, (2^(n + m))^2), nrow = 2^(m + n))
+    f <- match.fun(fun)
+    for (x in 0:(2^n - 1)) {
+        b <- as.character(rev(intToBits(f(x))))
+        print(b)
+        print("x and f(x)")
+        print(x)
+        print(f(x))
+        l <- length(b)
+        if (b[l - m + 1] == "00") {
+            g <- I()
+        }
+        else {
+            g <- X()
+        }
+        if (m >= 2) {
+            for (j in (l - m + 2):l) {
+                if (b[j] == "00") {
+                  g <- tensor(g, I())
+                }
+                else {
+                  g <- tensor(g, X())
+                }
+            }
+        }
+        print(g)
+        Um[((2^m) * x + 1):((2^m) * (x + 1)), ((2^m) * x + 1):((2^m) * 
+            (x + 1))] <- g
+    }
+    Um
+}
+
+```
+
+いざ実験。
+
+
+```{r}
+
+f <- function(x){
+	(x + 2) %% 4
+}
+
+n <- 2
+m <- 2
+mm <- my.Uf(f,n,m)
+```
+
+演算は行列表現があるので、それを視覚化する。
+
+mmは対角部分に$2^m \times 2^m$行列が$n^2$個、並ぶ。
+
+この変換関数f()では、input registerごとにf(x)の値が変わるので、4 個の$4 \times 4$行列はすべて相互に異なっていることが見て取れる。
+
+```{r}
+image(mm)
+```
+
+input registerと target registerを合わせた量子ビットに対応する、基底ベクトルを作り、それらが演算後、どの基底ベクトルに変化するかを表示する。
+
+
+```{r}
+mat <- diag(rep(1+0*1i,2^(n+m)))
+kets <- list()
+for(i in 1:length(mat[,1])){
+	kets[[i]] <- matrix(mat[i,],ncol=1)
+	#print(kets[[i]])
+	print(dirac(kets[[i]]))
+	print(dirac(U(mm,kets[[i]])))
+	print("---")
+}
+```
+
+
+別の関数f(x)でやってみる。
+
+input registerの値によらず、同じ値を返す関数だと、同じ部分行列が並ぶことが分かる
+
+
+```{r}
+f <- function(x){
+	3
+}
+
+n <- 2
+m <- 2
+mm <- my.Uf(f,n,m)
+image(mm)
+mat <- diag(rep(1+0*1i,2^(n+m)))
+kets <- list()
+for(i in 1:length(mat[,1])){
+	kets[[i]] <- matrix(mat[i,],ncol=1)
+	#print(kets[[i]])
+	print(dirac(kets[[i]]))
+	print(dirac(U(mm,kets[[i]])))
+	print("---")
+}
+```
+
+
+input registerの数とtarget registerの数は異なっていてももちろんよい。
+
+```{r}
+f <- function(x){
+	3
+}
+
+n <- 2
+m <- 3
+mm <- my.Uf(f,n,m)
+image(mm)
+mat <- diag(rep(1+0*1i,2^(n+m)))
+kets <- list()
+for(i in 1:length(mat[,1])){
+	kets[[i]] <- matrix(mat[i,],ncol=1)
+	#print(kets[[i]])
+	print(dirac(kets[[i]]))
+	print(dirac(U(mm,kets[[i]])))
+	print("---")
+}
+```
+
+
+input registerの個数は0でもよい。
+
+その場合は、Uf()関数の仕様から、f(0)の値がすべてのtarget registerに加算されることになる。
+
+```{r}
+f <- function(x){
+	x + 30
+}
+
+n <- 0
+m <- 4
+mm <- my.Uf(f,n,m)
+image(mm)
+mat <- diag(rep(1+0*1i,2^(n+m)))
+kets <- list()
+for(i in 1:length(mat[,1])){
+	kets[[i]] <- matrix(mat[i,],ncol=1)
+	#print(kets[[i]])
+	print(dirac(kets[[i]]))
+	print(dirac(U(mm,kets[[i]])))
+	print("---")
+}
+```
